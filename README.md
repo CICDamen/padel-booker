@@ -57,8 +57,6 @@ padel-booker/
      -p 8080:8080 \
      -e API_USERNAME=your_api_user \
      -e API_PASSWORD=your_api_password \
-     -e BOOKER_FIRST_NAME="Your Name" \
-     -e PLAYER_CANDIDATES="Player 1,Player 2,Player 3" \
      padel-booker
    ```
 
@@ -82,8 +80,6 @@ padel-booker/
 ### Environment Variables
 
 **Required:**
-- `BOOKER_FIRST_NAME`: Your first name for booking
-- `PLAYER_CANDIDATES`: Comma-separated list of player names
 - `API_USERNAME`: Username for API authentication  
 - `API_PASSWORD`: Password for API authentication
 
@@ -91,9 +87,9 @@ padel-booker/
 ```bash
 export API_USERNAME="admin"
 export API_PASSWORD="secure_password"
-export BOOKER_FIRST_NAME="John"
-export PLAYER_CANDIDATES="John Smith,Jane Doe,Mike Johnson,Sarah Wilson"
 ```
+
+**Note:** `BOOKER_FIRST_NAME` and `PLAYER_CANDIDATES` are now provided directly in the booking API request instead of environment variables.
 
 ### Booking Configuration
 
@@ -166,7 +162,9 @@ Content-Type: application/json
 
 {
   "username": "your_club_username",
-  "password": "your_club_password"
+  "password": "your_club_password",
+  "booker_first_name": "John",
+  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
 }
 ```
 
@@ -231,7 +229,7 @@ curl -u admin:password http://localhost:8080/api/config
 # Start booking
 curl -u admin:password \
   -H "Content-Type: application/json" \
-  -d '{"username":"club_user","password":"club_pass"}' \
+  -d '{"username":"club_user","password":"club_pass","booker_first_name":"John","player_candidates":["John Smith","Jane Doe","Mike Johnson"]}' \
   http://localhost:8080/api/book
 
 # Check status

@@ -40,7 +40,7 @@ async def book_court(request: BookingRequest, username: str = Depends(authentica
     # Start booking in background thread
     thread = threading.Thread(
         target=run_booking_background, 
-        args=(config, request.username, request.password, booking_status)
+        args=(config, request.username, request.password, request.booker_first_name, request.player_candidates, booking_status)
     )
     thread.start()
     

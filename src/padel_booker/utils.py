@@ -63,7 +63,7 @@ def load_config(config_path: str | None = None) -> dict:
         raise RuntimeError(f"Failed to load config from {config_path}: {e}") from e
 
 
-def run_booking_background(config: Dict, username: str, password: str, booking_status: Dict):
+def run_booking_background(config: Dict, username: str, password: str, booker_first_name: str, player_candidates: list[str], booking_status: Dict):
     """Run booking in background thread."""
     from .booker import PadelBooker
     
@@ -72,15 +72,10 @@ def run_booking_background(config: Dict, username: str, password: str, booking_s
         booking_status["result"] = None
         booking_status["started_at"] = datetime.now().isoformat()
         
-        # Get player info from environment variables
-        booker_first_name = os.getenv('BOOKER_FIRST_NAME')
-        player_candidates_str = os.getenv('PLAYER_CANDIDATES', '')
-        player_candidates = [p.strip() for p in player_candidates_str.split(',') if p.strip()]
-        
         if not booker_first_name or not player_candidates:
             booking_status["result"] = {
                 "status": "error", 
-                "message": "BOOKER_FIRST_NAME and PLAYER_CANDIDATES environment variables must be set"
+                "message": "booker_first_name and player_candidates must be provided"
             }
             return
         
