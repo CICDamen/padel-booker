@@ -38,4 +38,4 @@ ENV CHROME_OPTIONS="--headless --no-sandbox --disable-dev-shm-usage --disable-gp
 EXPOSE 8080
 
 # Default command to run the FastAPI service
-CMD ["uvicorn", "src.padel_booker.api:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uv", "run", "uvicorn", "src.padel_booker.api:app", "--host", "0.0.0.0", "--port", "8080"]
