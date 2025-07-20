@@ -37,10 +37,17 @@ async def book_court(request: BookingRequest, username: str = Depends(authentica
     if not config:
         raise HTTPException(status_code=400, detail="No configuration found")
     
+    # Get booker credentials from environment variables
+    booker_username = os.getenv('BOOKER_USERNAME')
+    booker_password = os.getenv('BOOKER_PASSWORD')
+    
+    if not booker_username or not booker_password:
+        raise HTTPException(status_code=500, detail="BOOKER_USERNAME and BOOKER_PASSWORD environment variables must be set")
+    
     # Start booking in background thread
     thread = threading.Thread(
         target=run_booking_background, 
-        args=(config, request.username, request.password, request.booker_first_name, request.player_candidates, booking_status)
+        args=(config, booker_username, booker_password, request.booker_first_name, request.player_candidates, booking_status)
     )
     thread.start()
     
