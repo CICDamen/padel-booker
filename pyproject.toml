@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "padel-booker"
+version = "0.1.0"
+description = "Padel booker for Sportclub Houten"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "black>=25.1.0",
+    "uvicorn>=0.24.0",
+    "selenium>=4.34.2",
+    "fastapi>=0.116.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

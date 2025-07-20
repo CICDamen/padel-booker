@@ -1,0 +1,447 @@
+"""Booking automation script."""
+
+import time
+import re
+from datetime import datetime
+from typing import Optional, Any
+import datetime as dt
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    NoAlertPresentException,
+)
+from selenium.webdriver.support.ui import Select
+
+from .utils import setup_driver, setup_logging
+
+
+class PadelBooker:
+    """Automated padel court booking system."""
+
+    def __init__(self, logger_name: str = "padel_booker"):
+        """Initialize the PadelBooker with logger and driver setup."""
+        self.logger = setup_logging(logger_name)
+        self.driver, self.wait = setup_driver()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup driver."""
+        if self.driver:
+            self.driver.quit()
+
+    def login(self, username: str, password: str, url: str) -> bool:
+        """Logs in to the booking system."""
+        try:
+            self.logger.info("Logging in to %s...", url)
+            self.driver.get(url)
+
+            # Use name attributes for input fields
+            self.driver.find_element(By.NAME, "username").send_keys(username)
+            self.driver.find_element(By.NAME, "password").send_keys(password)
+            # Find the login button within the form
+            login_button = self.driver.find_element(
+                By.CSS_SELECTOR, "#login-form button"
+            )
+            login_button.click()
+
+            # Wait for the login form to disappear (or for a post-login element to appear)
+            self.wait.until(EC.invisibility_of_element_located((By.ID, "login-form")))
+            self.logger.info("Login successful")
+            return True
+
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error("Login failed: %s", e)
+            return False
+
+    def check_availability(
+        self, date: str, start_time: str, duration_hours: float
+    ) -> Optional[Any]:
+        """Checks the availability of a time slot with a specific start time and duration (in hours)."""
+        try:
+            self.logger.info(
+                "Checking availability for %s at %s for %s hours",
+                date,
+                start_time,
+                duration_hours,
+            )
+            self.wait.until(
+                EC.presence_of_element_located((By.CLASS_NAME, "matrix-container"))
+            )
+            available_slots = self.driver.find_elements(
+                By.CSS_SELECTOR, ".slot.normal.free"
+            )
+            self.logger.info("Found %d free slots on the page.", len(available_slots))
+
+            for slot in available_slots:
+                try:
+                    period_div = slot.find_element(By.CLASS_NAME, "slot-period")
+                    period_text = period_div.text.strip()
+                    self.logger.info("Free slot: %s", period_text)
+                    start, end = [t.strip() for t in period_text.split("-")]
+                    if start == start_time:
+                        fmt = "%H:%M"
+                        start_dt = datetime.strptime(start, fmt)
+                        end_dt = datetime.strptime(end, fmt)
+                        duration = (end_dt - start_dt).total_seconds() / 3600
+                        if abs(duration - duration_hours) < 0.01:
+                            self.logger.info("Found available slot: %s", period_text)
+                            return slot
+                except (NoSuchElementException, TimeoutException) as e:
+                    self.logger.warning("Error parsing slot: %s", e)
+
+            self.logger.info("Desired time slot not available")
+            return None
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error("Error checking availability: %s", str(e))
+            return None
+
+    def select_players(self, player_candidates: list[str]) -> list[str]:
+        """Selects 3 available players from the provided list and adds them as speler 2/3/4."""
+        selected = []
+        used_candidates = set()
+
+        for idx in range(2, 5):  # speler 2, 3, 4
+            select_elem = self.driver.find_element(By.NAME, f"players[{idx}]")
+            select = Select(select_elem)
+            found = False
+
+            for candidate in player_candidates:
+                if candidate in used_candidates:
+                    continue
+                # Try to find an option with the candidate's name
+                for option in select.options:
+                    if option.text.strip() == candidate:
+                        select.select_by_visible_text(candidate)
+                        self.logger.info("Selected %s as speler %d", candidate, idx)
+                        selected.append(candidate)
+                        used_candidates.add(candidate)
+                        found = True
+                        break
+                if found:
+                    break
+
+            if not found:
+                self.logger.error(
+                    "Could not find an available player for speler %d", idx
+                )
+                return selected
+
+        return selected
+
+    def make_booking(
+        self, slot_element: Any, guest_details: dict[str, str]
+    ) -> dict[str, Any]:
+        """Makes a booking for the selected time slot."""
+        try:
+            self.logger.info("Making booking...")
+            slot_element.click()
+            self.wait.until(EC.presence_of_element_located((By.ID, "booking-form")))
+
+            self.driver.find_element(By.ID, "guest-name").send_keys(
+                guest_details["name"]
+            )
+            self.driver.find_element(By.ID, "email").send_keys(guest_details["email"])
+            self.driver.find_element(By.ID, "phone").send_keys(guest_details["phone"])
+            self.driver.find_element(By.ID, "confirm-booking").click()
+
+            self.wait.until(
+                EC.presence_of_element_located((By.CLASS_NAME, "booking-confirmed"))
+            )
+            confirmation_number = self.driver.find_element(
+                By.CLASS_NAME, "confirmation-number"
+            ).text
+            self.logger.info("Booking confirmed: %s", confirmation_number)
+
+            return {
+                "status": "success",
+                "confirmation_number": confirmation_number,
+                "timestamp": datetime.now().isoformat(),
+            }
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error("Booking failed: %s", str(e))
+            return {"status": "error", "message": str(e)}
+
+    def go_to_date(self, target_date: str):
+        """Navigates to the target date using the calendar date picker (format: YYYY-MM-DD)."""
+        try:
+            # Parse target date
+            target_dt = dt.datetime.strptime(target_date, "%Y-%m-%d").date()
+            year = target_dt.year
+            month = target_dt.month
+            day = target_dt.day
+
+            self.logger.info("Navigating to date: %s", target_date)
+
+            # First, navigate to the correct month/year if needed
+            self.wait.until(
+                EC.presence_of_element_located((By.ID, "calendar_date_title"))
+            )
+
+            max_month_navigation = 24  # Prevent infinite loops
+            navigation_count = 0
+
+            while navigation_count < max_month_navigation:
+                # Get current month/year from calendar title
+                calendar_title = self.driver.find_element(
+                    By.ID, "calendar_date_title"
+                ).text.strip()
+                try:
+                    # Parse "Jul 2025" format
+                    month_names = [
+                        "Jan",
+                        "Feb",
+                        "Mar",
+                        "Apr",
+                        "May",
+                        "Jun",
+                        "Jul",
+                        "Aug",
+                        "Sep",
+                        "Oct",
+                        "Nov",
+                        "Dec",
+                    ]
+                    parts = calendar_title.split()
+                    current_month_str = parts[0]
+                    current_year = int(parts[1])
+                    current_month = month_names.index(current_month_str.title()) + 1
+                except (ValueError, IndexError) as e:
+                    self.logger.error(
+                        "Failed to parse calendar title '%s': %s", calendar_title, e
+                    )
+                    break
+
+                if current_year == year and current_month == month:
+                    # We're in the right month, now click the specific date
+                    break
+                elif (current_year < year) or (
+                    current_year == year and current_month < month
+                ):
+                    # Need to go forward
+                    next_btn = self.driver.find_element(
+                        By.CSS_SELECTOR, ".month.next a"
+                    )
+                    next_btn.click()
+                else:
+                    # Need to go backward
+                    prev_btn = self.driver.find_element(
+                        By.CSS_SELECTOR, ".month.prev a"
+                    )
+                    prev_btn.click()
+
+                navigation_count += 1
+                time.sleep(0.5)  # Brief pause between navigation clicks
+                self.wait.until(
+                    EC.presence_of_element_located((By.ID, "calendar_date_title"))
+                )
+
+            if navigation_count >= max_month_navigation:
+                self.logger.error("Exceeded maximum month navigation attempts")
+                return
+
+            # Now click on the specific date
+            date_id = f"cal_{year}_{month}_{day}"
+            try:
+                date_cell = self.driver.find_element(By.ID, date_id)
+                date_link = date_cell.find_element(By.CLASS_NAME, "cal-link")
+                date_link.click()
+                self.logger.info("Successfully navigated to %s", target_date)
+
+                # Wait for the matrix to load for the new date
+                time.sleep(1)
+                self.wait.until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "matrix-container"))
+                )
+
+            except (NoSuchElementException, TimeoutException) as e:
+                self.logger.error("Failed to click on date %s: %s", target_date, e)
+
+        except ValueError as e:
+            self.logger.error("Invalid date format '%s': %s", target_date, e)
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error("Error navigating to date: %s", e)
+
+    def wait_for_matrix_date(self, target_date: str):
+        """Waits until the matrix table is showing the correct date."""
+
+        def date_matches(driver):
+            date_title = driver.find_element(By.ID, "matrix_date_title").text.strip()
+            try:
+                date_str = date_title.split()[-1]
+                current_date = dt.datetime.strptime(date_str, "%d-%m-%Y").date()
+                target_dt = dt.datetime.strptime(target_date, "%Y-%m-%d").date()
+                return current_date == target_dt
+            except (ValueError, IndexError) as e:
+                self.logger.warning("Error parsing date in wait_for_matrix_date: %s", e)
+                return False
+
+        self.wait.until(date_matches)
+
+    def find_consecutive_slots(self, start_time: str, duration_hours: float):
+        """Finds a court with enough consecutive free slots starting at start_time to cover duration_hours."""
+        available_slots = self.driver.find_elements(
+            By.CSS_SELECTOR, ".slot.normal.free"
+        )
+        slots_by_court = {}
+
+        # Group slots by court (using the slot's 'title' attribute)
+        for slot in available_slots:
+            try:
+                period_div = slot.find_element(By.CLASS_NAME, "slot-period")
+                period_text = period_div.text.strip()
+                start, end = [t.strip() for t in period_text.split("-")]
+                court = slot.get_attribute("title")  # e.g., "Padel indoor 2"
+                if court not in slots_by_court:
+                    slots_by_court[court] = []
+                slots_by_court[court].append((start, end, slot))
+            except (NoSuchElementException, ValueError, IndexError):
+                continue
+
+        fmt = "%H:%M"
+        needed_minutes = int(duration_hours * 60)
+
+        for court, slots in slots_by_court.items():
+            # Sort slots by start time
+            slots.sort(key=lambda x: datetime.strptime(x[0], fmt))
+
+            for i, (start, end, slot_elem) in enumerate(slots):
+                if start != start_time:
+                    continue
+
+                # Try to chain slots
+                total_minutes = (
+                    datetime.strptime(end, fmt) - datetime.strptime(start, fmt)
+                ).seconds // 60
+                j = i
+                last_end = end
+
+                while total_minutes < needed_minutes and j + 1 < len(slots):
+                    next_start, next_end, _ = slots[j + 1]
+                    if next_start == last_end:
+                        total_minutes += (
+                            datetime.strptime(next_end, fmt)
+                            - datetime.strptime(next_start, fmt)
+                        ).seconds // 60
+                        last_end = next_end
+                        j += 1
+                    else:
+                        break
+
+                if total_minutes >= needed_minutes:
+                    self.logger.info(
+                        "Found consecutive slots on %s from %s to %s",
+                        court,
+                        start_time,
+                        last_end,
+                    )
+                    return slot_elem, last_end
+
+        self.logger.info("No consecutive slots found for the requested duration")
+        return None, None
+
+    def try_booking_with_player_rotation(
+        self, player_candidates: list[str], booker_first_name: str
+    ):
+        """Tries to make a booking by selecting players and handling blocked player errors."""
+        candidates = player_candidates[:]
+        blocked_players = set()
+
+        while len(candidates) >= 3:
+            # Deselect and reselect players each time
+            selected = self.select_players(candidates)
+            if len(selected) < 3:
+                self.logger.error("Not enough available players to proceed.")
+                return None
+
+            # Click the 'Verder' button
+            verder_btn = self.driver.find_element(By.ID, "__make_submit")
+            verder_btn.click()
+            time.sleep(1)  # Wait for possible popup or page update
+
+            # Try to detect alert (JS alert)
+            error_text = None
+            try:
+                alert = self.driver.switch_to.alert
+                error_text = alert.text
+                alert.accept()
+            except NoAlertPresentException:
+                # Check for custom modal/pop-up
+                try:
+                    popup = self.driver.find_element(By.CLASS_NAME, "swal2-popup")
+                    if popup.is_displayed():
+                        error_text = popup.text
+                        close_btns = popup.find_elements(By.TAG_NAME, "button")
+                        for btn in close_btns:
+                            if btn.is_displayed():
+                                btn.click()
+                                break
+                except (NoSuchElementException, TimeoutException):
+                    pass
+
+            if error_text:
+                self.logger.warning("Booking error popup: %s", error_text)
+                m = re.search(r"\[\d+] ([^ ]+) [^ ]+ mag niet meer spelen", error_text)
+                if m:
+                    blocked = m.group(1)
+                    self.logger.info("Blocked player detected: %s", blocked)
+                    if blocked == booker_first_name:
+                        self.logger.error(
+                            "Booker %s is blocked. Cancelling booking attempt.",
+                            booker_first_name,
+                        )
+                        return None
+                    blocked_players.add(blocked)
+                    candidates = [p for p in candidates if p != blocked]
+                    continue
+                else:
+                    self.logger.error("Unknown booking error, aborting.")
+                    return None
+            else:
+                # No error popup detected, proceed with final booking confirmation
+                try:
+                    # TODO: uncomment for production
+                    # Click the final 'Bevestigen' button to complete the booking
+                    # confirm_btn = self.driver.find_element(By.ID, "__make_submit2")
+                    # confirm_btn.click()
+                    # time.sleep(2)  # Wait for booking confirmation
+
+                    self.logger.info("Players selected for booking: %s", selected)
+                    # self.logger.info(f"Booking confirmed with players: {selected}")
+                    return selected
+                except (NoSuchElementException, TimeoutException) as e:
+                    self.logger.error(
+                        "Failed to find or click confirmation button: %s", e
+                    )
+                    return None
+
+        self.logger.error("Ran out of player candidates for booking.")
+        return None
+
+    def book_slot(self, slot, end_time: str, player_candidates: list[str], booker_first_name: str):
+        """Books a slot by clicking it, selecting end time, and attempting booking with player rotation."""
+        try:
+            slot.click()
+            self.wait.until(EC.presence_of_element_located((By.NAME, "players[2]")))
+            
+            # Select the end time
+            end_time_select = self.driver.find_element(By.NAME, "end_time")
+            for option in end_time_select.find_elements(By.TAG_NAME, "option"):
+                if option.get_attribute("value") == end_time:
+                    option.click()
+                    break
+            
+            # Try booking with player rotation
+            selected = self.try_booking_with_player_rotation(player_candidates, booker_first_name)
+            return selected
+            
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error("Error during slot booking: %s", e)
+            return None
+
+
