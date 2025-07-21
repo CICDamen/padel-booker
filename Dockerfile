@@ -19,16 +19,15 @@ WORKDIR /app
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install uv and dependencies
-RUN pip install uv
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Install dependencies
 RUN uv sync --frozen
 
 # Copy source code
 COPY src/padel_booker/ ./src/padel_booker/
 COPY data/ ./data/
-
-# Install the local package
-RUN uv pip install -e .
 
 # Set Python path and Chrome options for headless operation
 ENV PYTHONPATH=/app
