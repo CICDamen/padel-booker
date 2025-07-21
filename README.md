@@ -57,6 +57,8 @@ padel-booker/
      -p 8080:8080 \
      -e API_USERNAME=your_api_user \
      -e API_PASSWORD=your_api_password \
+     -e BOOKER_PASSWORD=your_booking_password \
+     -e BOOKER_USERNAME=your_booking_username \
      padel-booker
    ```
 
