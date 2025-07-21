@@ -32,6 +32,7 @@ COPY data/ ./data/
 # Set Python path and Chrome options for headless operation
 ENV PYTHONPATH=/app
 ENV CHROME_OPTIONS="--headless --no-sandbox --disable-dev-shm-usage --disable-gpu"
+ENV CHROMEDRIVER_PATH="/usr/bin/chromedriver"
 
 # Expose port for FastAPI service
 EXPOSE 8080

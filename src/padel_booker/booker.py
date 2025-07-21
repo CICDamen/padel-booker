@@ -423,25 +423,27 @@ class PadelBooker:
         self.logger.error("Ran out of player candidates for booking.")
         return None
 
-    def book_slot(self, slot, end_time: str, player_candidates: list[str], booker_first_name: str):
+    def book_slot(
+        self, slot, end_time: str, player_candidates: list[str], booker_first_name: str
+    ):
         """Books a slot by clicking it, selecting end time, and attempting booking with player rotation."""
         try:
             slot.click()
             self.wait.until(EC.presence_of_element_located((By.NAME, "players[2]")))
-            
+
             # Select the end time
             end_time_select = self.driver.find_element(By.NAME, "end_time")
             for option in end_time_select.find_elements(By.TAG_NAME, "option"):
                 if option.get_attribute("value") == end_time:
                     option.click()
                     break
-            
+
             # Try booking with player rotation
-            selected = self.try_booking_with_player_rotation(player_candidates, booker_first_name)
+            selected = self.try_booking_with_player_rotation(
+                player_candidates, booker_first_name
+            )
             return selected
-            
+
         except (NoSuchElementException, TimeoutException) as e:
             self.logger.error("Error during slot booking: %s", e)
             return None
-
-
