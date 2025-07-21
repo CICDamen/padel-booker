@@ -2,7 +2,7 @@
 
 import os
 import threading
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Security
 from .models import BookingRequest
 from .utils import run_booking_background, authenticate_user
 
@@ -14,10 +14,15 @@ booking_status = {"running": False, "result": None, "started_at": None}
 
 @app.post("/api/book")
 async def book_court(
-    request: BookingRequest
+    request: BookingRequest,
+    authenticated: bool = Security(authenticate_user)
 ):
     """Start a booking process."""
     global booking_status
+
+    # Verify authentication was successful
+    if not authenticated:
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
     if booking_status["running"]:
         raise HTTPException(status_code=400, detail="Booking already in progress")
@@ -57,8 +62,12 @@ async def book_court(
 
 
 @app.get("/api/status")
-async def get_status():
+async def get_status(authenticated: bool = Security(authenticate_user)):
     """Get current booking status."""
+    # Verify authentication was successful
+    if not authenticated:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
     return {
         "running": booking_status["running"],
         "result": booking_status["result"],
