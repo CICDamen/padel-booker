@@ -352,7 +352,7 @@ class PadelBooker:
         """Tries to make a booking by selecting players and handling blocked player errors."""
         candidates = player_candidates[:]
         blocked_players = set()
-        max_attempts = os.getenv("MAX_BOOKING_ATTEMPTS", "2")
+        max_attempts = int(os.getenv("MAX_BOOKING_ATTEMPTS", "2"))
         attempt_count = 0
 
         while len(candidates) >= 3 and attempt_count < max_attempts:
