@@ -101,7 +101,7 @@ def run_booking_background(
 
         with PadelBooker() as booker:
             # Login
-            if not booker.login(username, password, config["login_url"]):
+            if not booker.login(username, password, config["url"]):
                 booking_status["result"] = {
                     "status": "error",
                     "message": "Login failed",
