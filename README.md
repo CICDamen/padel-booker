@@ -10,7 +10,7 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
 - Smart slot and player selection with rotation and error handling
-- Configurable booking date, time, duration, and player list
+- **Flexible booking parameters** passed directly via API
 - Headless browser automation (no UI required)
 - **Docker support** for easy deployment
 - Comprehensive logging and error reporting
@@ -21,8 +21,6 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 
 ```
 padel-booker/
-├── data/
-│   └── config.json         # Booking configuration (date, time, players, etc.)
 ├── src/
 │   ├── api.py              # FastAPI application
 │   ├── models.py           # Pydantic models for API
@@ -86,30 +84,18 @@ padel-booker/
 **Required:**
 - `API_USERNAME`: Username for API authentication  
 - `API_PASSWORD`: Password for API authentication
+- `BOOKER_USERNAME`: Username for the booking platform
+- `BOOKER_PASSWORD`: Password for the booking platform
 
 **Optional:**
 - `ENABLE_BOOKING`: Set to `true` to enable actual booking confirmation. When not set or set to any other value, the system runs in dry-run mode (simulates booking without final confirmation)
+- `MAX_BOOKING_ATTEMPTS`: Maximum number of attempts for booking if players are not available
 
 **Example:**
 ```bash
 export API_USERNAME="admin"
 export API_PASSWORD="secure_password"
 export ENABLE_BOOKING="true"  # Enable actual bookings (omit for dry-run mode)
-```
-
-**Note:** `BOOKER_FIRST_NAME` and `PLAYER_CANDIDATES` are now provided directly in the booking API request instead of environment variables.
-
-### Booking Configuration
-
-The API uses `data/config.json` for booking settings:
-
-```json
-{
-  "login_url": "https://houten.baanreserveren.nl/",
-  "booking_date": "2025-07-24",
-  "start_time": "21:30",
-  "duration_hours": 1.5
-}
 ```
 
 ---
@@ -134,34 +120,6 @@ GET /health
 }
 ```
 
-#### 📋 Get Configuration
-```bash
-GET /api/config
-Authorization: Basic base64(username:password)
-```
-```json
-{
-  "login_url": "https://houten.baanreserveren.nl/",
-  "booking_date": "2025-07-24",
-  "start_time": "21:30",
-  "duration_hours": 1.5
-}
-```
-
-#### ⚙️ Update Configuration
-```bash
-POST /api/config
-Authorization: Basic base64(username:password)
-Content-Type: application/json
-
-{
-  "login_url": "https://houten.baanreserveren.nl/",
-  "booking_date": "2025-07-25",
-  "start_time": "20:00",
-  "duration_hours": 2.0
-}
-```
-
 #### 🎾 Start Booking
 ```bash
 POST /api/book
@@ -169,6 +127,10 @@ Authorization: Basic base64(username:password)
 Content-Type: application/json
 
 {
+  "login_url": "https://houten.baanreserveren.nl/",
+  "booking_date": "2025-07-28",
+  "start_time": "21:30",
+  "duration_hours": 1.5,
   "booker_first_name": "John",
   "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
 }
@@ -205,7 +167,8 @@ Authorization: Basic base64(username:password)
   "result": {
     "status": "success",
     "message": "Booking successful with players: ['John Smith', 'John']",
-    "players": ["John Smith", "John"]
+    "players": ["John Smith", "John"],
+    "booking_date": "2025-07-28"
   },
   "started_at": "2025-01-20T14:30:00"
 }
@@ -229,13 +192,17 @@ Authorization: Basic base64(username:password)
 # Check health
 curl http://localhost:8080/health
 
-# Get config
-curl -u admin:password http://localhost:8080/api/config
-
 # Start booking
 curl -u admin:password \
   -H "Content-Type: application/json" \
-  -d '{"booker_first_name":"John","player_candidates":["John Smith","Jane Doe","Mike Johnson"]}' \
+  -d '{
+    "login_url": "https://houten.baanreserveren.nl/",
+    "booking_date": "2025-07-28",
+    "start_time": "21:30",
+    "duration_hours": 1.5,
+    "booker_first_name": "John",
+    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"]
+  }' \
   http://localhost:8080/api/book
 
 # Check status

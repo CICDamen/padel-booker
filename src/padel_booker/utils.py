@@ -87,9 +87,12 @@ def load_config(config_path: str | None = None) -> dict:
 
 
 def run_booking_background(
-    config: Dict,
     username: str,
     password: str,
+    login_url: str,
+    booking_date: str,
+    start_time: str,
+    duration_hours: float,
     booker_first_name: str,
     player_candidates: list[str],
     booking_status: Dict,
@@ -111,26 +114,26 @@ def run_booking_background(
 
         with PadelBooker() as booker:
             # Login
-            if not booker.login(username, password, config["login_url"]):
+            if not booker.login(username, password, login_url):
                 booking_status["result"] = {
                     "status": "error",
                     "message": "Login failed",
                 }
                 return
 
-            # Navigate to booking date
-            booker.go_to_date(config["booking_date"])
-            booker.wait_for_matrix_date(config["booking_date"])
+            # Navigate to booking date from input
+            booker.go_to_date(booking_date)
+            booker.wait_for_matrix_date(booking_date)
 
             # Find consecutive slots
             slot, end_time = booker.find_consecutive_slots(
-                config["start_time"], config["duration_hours"]
+                start_time, duration_hours
             )
 
             if not slot:
                 booking_status["result"] = {
                     "status": "error",
-                    "message": f"No available slots found for {config['start_time']} on {config['booking_date']}",
+                    "message": f"No available slots found for {start_time} on {booking_date}",
                 }
                 return
 
@@ -144,6 +147,7 @@ def run_booking_background(
                     "status": "success",
                     "message": f"Booking successful with players: {selected_players}",
                     "players": selected_players,
+                    "booking_date": booking_date,
                 }
             else:
                 booking_status["result"] = {
