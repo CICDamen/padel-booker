@@ -60,7 +60,8 @@ padel-booker/
      -e BOOKER_PASSWORD=your_booking_password \
      -e BOOKER_USERNAME=your_booking_username \
      -e ENABLE_BOOKING=true \  # Set to true to enable actual bookings
-     padel-booker
+     -e MAX_BOOKING_ATTEMPTS=3 \ # Optional: max attempts for booking - if players are not available
+     -t padel-booker
    ```
 
 ### 🐍 Local Development

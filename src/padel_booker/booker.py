@@ -1,5 +1,5 @@
 """Booking automation script."""
-
+import os
 import time
 import re
 from datetime import datetime
@@ -352,7 +352,7 @@ class PadelBooker:
         """Tries to make a booking by selecting players and handling blocked player errors."""
         candidates = player_candidates[:]
         blocked_players = set()
-        max_attempts = len(player_candidates) * 2  # Set a reasonable maximum number of attempts
+        max_attempts = os.getenv("MAX_BOOKING_ATTEMPTS", "2")
         attempt_count = 0
 
         while len(candidates) >= 3 and attempt_count < max_attempts:
