@@ -27,7 +27,6 @@ RUN uv sync --frozen
 
 # Copy source code
 COPY src/padel_booker/ ./src/padel_booker/
-COPY data/ ./data/
 
 # Set Python path and Chrome options for headless operation
 ENV PYTHONPATH=/app
