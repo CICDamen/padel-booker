@@ -15,7 +15,8 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.support.ui import Select
 
-from .utils import setup_driver, setup_logging
+from .utils import setup_driver, setup_logging, is_booking_enabled
+from .exceptions import PlayerSelectionExhaustedError
 
 
 class PadelBooker:
@@ -351,13 +352,30 @@ class PadelBooker:
         """Tries to make a booking by selecting players and handling blocked player errors."""
         candidates = player_candidates[:]
         blocked_players = set()
+        max_attempts = len(player_candidates) * 2  # Set a reasonable maximum number of attempts
+        attempt_count = 0
 
-        while len(candidates) >= 3:
+        while len(candidates) >= 3 and attempt_count < max_attempts:
+            attempt_count += 1
+
+            # Keep track of already tried players to avoid loops
+            for blocked in blocked_players:
+                if blocked in candidates:
+                    # Remove any players we've already identified as blocked
+                    candidates = [p for p in candidates if p != blocked]
+
+            if len(candidates) < 3:
+                self.logger.error("Not enough non-blocked players available after removing: %s",
+                                  ", ".join(blocked_players))
+                raise PlayerSelectionExhaustedError(
+                    f"Not enough players available after removing blocked players: {blocked_players}"
+                )
+
             # Deselect and reselect players each time
             selected = self.select_players(candidates)
             if len(selected) < 3:
                 self.logger.error("Not enough available players to proceed.")
-                return None
+                raise PlayerSelectionExhaustedError("Could not select enough players")
 
             # Click the 'Verder' button
             verder_btn = self.driver.find_element(By.ID, "__make_submit")
@@ -396,8 +414,22 @@ class PadelBooker:
                             booker_first_name,
                         )
                         return None
+
+                    # Add the blocked player to the blocked set
                     blocked_players.add(blocked)
-                    candidates = [p for p in candidates if p != blocked]
+
+                    # Create a new candidates list without the blocked players
+                    candidates = [p for p in player_candidates if p not in blocked_players]
+
+                    # Check if we have enough players left
+                    if len(candidates) < 3:
+                        self.logger.error(
+                            "Not enough players left after removing blocked players: %s",
+                            ", ".join(blocked_players)
+                        )
+                        raise PlayerSelectionExhaustedError(
+                            f"Not enough players available after removing blocked players: {blocked_players}"
+                        )
                     continue
                 else:
                     self.logger.error("Unknown booking error, aborting.")
@@ -405,11 +437,13 @@ class PadelBooker:
             else:
                 # No error popup detected, proceed with final booking confirmation
                 try:
-                    # TODO: uncomment for production
-                    # Click the final 'Bevestigen' button to complete the booking
-                    # confirm_btn = self.driver.find_element(By.ID, "__make_submit2")
-                    # confirm_btn.click()
-                    # time.sleep(2)  # Wait for booking confirmation
+                    if is_booking_enabled():
+                        self.logger.info("BOOKING ENABLED: Confirming actual booking")
+                        confirm_btn = self.driver.find_element(By.ID, "__make_submit2")
+                        confirm_btn.click()
+                        time.sleep(2)  # Wait for booking confirmation
+                    else:
+                        self.logger.info("BOOKING DISABLED: Skipping final confirmation (dry-run mode)")
 
                     self.logger.info("Players selected for booking: %s", selected)
                     # self.logger.info(f"Booking confirmed with players: {selected}")
@@ -420,8 +454,13 @@ class PadelBooker:
                     )
                     return None
 
-        self.logger.error("Ran out of player candidates for booking.")
-        return None
+        # If we've exhausted our attempts or don't have enough candidates
+        if attempt_count >= max_attempts:
+            self.logger.error("Maximum booking attempts reached (%d)", max_attempts)
+            raise PlayerSelectionExhaustedError(f"Maximum booking attempts reached ({max_attempts})")
+        else:
+            self.logger.error("Ran out of player candidates for booking.")
+            raise PlayerSelectionExhaustedError("Not enough players available for booking")
 
     def book_slot(
         self, slot, end_time: str, player_candidates: list[str], booker_first_name: str
@@ -439,10 +478,14 @@ class PadelBooker:
                     break
 
             # Try booking with player rotation
-            selected = self.try_booking_with_player_rotation(
-                player_candidates, booker_first_name
-            )
-            return selected
+            try:
+                selected = self.try_booking_with_player_rotation(
+                    player_candidates, booker_first_name
+                )
+                return selected
+            except PlayerSelectionExhaustedError as e:
+                self.logger.error("Player selection exhausted: %s", str(e))
+                return None
 
         except (NoSuchElementException, TimeoutException) as e:
             self.logger.error("Error during slot booking: %s", e)

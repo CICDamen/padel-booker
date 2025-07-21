@@ -59,6 +59,7 @@ padel-booker/
      -e API_PASSWORD=your_api_password \
      -e BOOKER_PASSWORD=your_booking_password \
      -e BOOKER_USERNAME=your_booking_username \
+     -e ENABLE_BOOKING=true \  # Set to true to enable actual bookings
      padel-booker
    ```
 
@@ -85,10 +86,14 @@ padel-booker/
 - `API_USERNAME`: Username for API authentication  
 - `API_PASSWORD`: Password for API authentication
 
+**Optional:**
+- `ENABLE_BOOKING`: Set to `true` to enable actual booking confirmation. When not set or set to any other value, the system runs in dry-run mode (simulates booking without final confirmation)
+
 **Example:**
 ```bash
 export API_USERNAME="admin"
 export API_PASSWORD="secure_password"
+export ENABLE_BOOKING="true"  # Enable actual bookings (omit for dry-run mode)
 ```
 
 **Note:** `BOOKER_FIRST_NAME` and `PLAYER_CANDIDATES` are now provided directly in the booking API request instead of environment variables.
@@ -163,8 +168,6 @@ Authorization: Basic base64(username:password)
 Content-Type: application/json
 
 {
-  "username": "your_club_username",
-  "password": "your_club_password",
   "booker_first_name": "John",
   "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
 }
@@ -231,7 +234,7 @@ curl -u admin:password http://localhost:8080/api/config
 # Start booking
 curl -u admin:password \
   -H "Content-Type: application/json" \
-  -d '{"username":"club_user","password":"club_pass","booker_first_name":"John","player_candidates":["John Smith","Jane Doe","Mike Johnson"]}' \
+  -d '{"booker_first_name":"John","player_candidates":["John Smith","Jane Doe","Mike Johnson"]}' \
   http://localhost:8080/api/book
 
 # Check status

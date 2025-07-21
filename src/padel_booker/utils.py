@@ -18,6 +18,16 @@ from selenium.webdriver.support.ui import WebDriverWait
 security = HTTPBasic()
 
 
+def is_booking_enabled() -> bool:
+    """
+    Check if actual booking confirmation is enabled based on environment variable.
+
+    Returns:
+        bool: True if ENABLE_BOOKING environment variable is set to 'true', False otherwise
+    """
+    return os.environ.get("ENABLE_BOOKING", "false").lower() == "true"
+
+
 def setup_driver() -> tuple[webdriver.Chrome, WebDriverWait]:
     """Sets up the Selenium driver and wait."""
     chrome_options = Options()

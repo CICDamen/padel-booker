@@ -11,3 +11,7 @@ class SlotNotFoundError(Exception):
 
 class BookingFailedError(Exception):
     """Raised when booking could not be completed."""
+
+
+class PlayerSelectionExhaustedError(Exception):
+    """Raised when all possible player combinations have been tried without success."""
