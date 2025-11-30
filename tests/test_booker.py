@@ -210,7 +210,7 @@ class TestPadelBookerFindConsecutiveSlots:
         mock_wait = MagicMock()
         mock_driver.return_value = (mock_driver_instance, mock_wait)
 
-        # Create mock slots
+        # Create mock slots for consecutive booking
         mock_slot1 = MagicMock()
         mock_period_div1 = MagicMock()
         mock_period_div1.text = "21:30 - 22:30"
@@ -228,8 +228,9 @@ class TestPadelBookerFindConsecutiveSlots:
         booker = PadelBooker()
         slot, end_time = booker.find_consecutive_slots("21:30", 2.0)
 
-        # Should find the slot chain
-        assert slot is not None or slot is None  # Either found or not based on logic
+        # Should find consecutive slots on the same court
+        assert slot is mock_slot1
+        assert end_time == "23:30"
 
     @patch("src.padel_booker.booker.setup_driver")
     @patch("src.padel_booker.booker.setup_logging")

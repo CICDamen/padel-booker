@@ -36,8 +36,6 @@ class TestIsBookingEnabled:
     def test_booking_disabled_when_not_set(self):
         """Test that booking is disabled when ENABLE_BOOKING is not set."""
         with patch.dict(os.environ, {}, clear=True):
-            # Remove ENABLE_BOOKING if it exists
-            os.environ.pop("ENABLE_BOOKING", None)
             assert is_booking_enabled() is False
 
     def test_booking_disabled_when_other_value(self):
