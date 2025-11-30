@@ -1,14 +1,11 @@
 """Unit tests for PadelBooker class methods."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import Mock, patch
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import Select
 
 from padel_booker.booker import PadelBooker
-from padel_booker.exceptions import PlayerSelectionExhaustedError
 
 
 @pytest.mark.unit

@@ -1,7 +1,7 @@
 """Unit tests for navigation strategies."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 from padel_booker.navigation_strategy import (
     NavigationStrategy,

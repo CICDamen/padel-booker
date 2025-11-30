@@ -1,7 +1,7 @@
 """Unit tests for FastAPI endpoints."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from padel_booker.api import app
