@@ -288,8 +288,10 @@ class PadelBooker:
                 self.logger.error("Not enough available players to proceed.")
                 raise PlayerSelectionExhaustedError("Could not select enough players")
 
-            # Click the 'Verder' button
-            verder_btn = self.driver.find_element(By.ID, "__make_submit")
+            # Click the 'Verder' button (use value selector for mobile/desktop compatibility)
+            verder_btn = self.driver.find_element(
+                By.CSS_SELECTOR, "input.button.submit[value='Verder']"
+            )
             verder_btn.click()
             time.sleep(1)  # Wait for possible popup or page update
 
@@ -350,7 +352,9 @@ class PadelBooker:
                 try:
                     if is_booking_enabled():
                         self.logger.info("BOOKING ENABLED: Confirming actual booking")
-                        confirm_btn = self.driver.find_element(By.ID, "__make_submit2")
+                        confirm_btn = self.driver.find_element(
+                            By.CSS_SELECTOR, "input.button.submit[value='Bevestigen']"
+                        )
                         confirm_btn.click()
                         time.sleep(2)  # Wait for booking confirmation
                     else:
