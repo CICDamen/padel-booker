@@ -1,8 +1,7 @@
 """Unit tests for utility functions."""
 
-import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from padel_booker.utils import (
     is_booking_enabled,
