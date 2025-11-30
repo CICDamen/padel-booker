@@ -59,8 +59,13 @@ def setup_driver(device_mode: str = "mobile") -> tuple[webdriver.Chrome, WebDriv
         chrome_options.add_argument("--disable-dev-shm-usage")
 
     # Enable mobile emulation only for mobile mode
+    # Use explicit device metrics and user-agent to ensure the website
+    # recognizes this as a mobile device (allows 29 days advance booking)
     if device_mode == "mobile":
-        mobile_emulation = {"deviceName": "iPhone 12 Pro"}
+        mobile_emulation = {
+            "deviceMetrics": {"width": 390, "height": 844, "pixelRatio": 3.0},
+            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+        }
         chrome_options.add_experimental_option("mobileEmulation", mobile_emulation)
 
     # Set path to ChromeDriver from environment variable
