@@ -19,8 +19,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+where = ["src"]
 
 [tool.pytest.ini_options]
 # Test discovery patterns
