@@ -17,16 +17,16 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=fa
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+# Copy source code (needed before uv sync for editable install)
+COPY src/padel_booker/ ./src/padel_booker/
+
 # Install dependencies
 RUN uv sync --frozen
-
-# Copy source code
-COPY src/padel_booker/ ./src/padel_booker/
 
 # Set Python path and Chrome options for headless operation
 ENV PYTHONPATH=/app

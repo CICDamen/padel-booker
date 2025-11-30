@@ -4,7 +4,6 @@ import time
 import re
 from datetime import datetime
 from typing import Optional, Any
-import datetime as dt
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -17,15 +16,24 @@ from selenium.webdriver.support.ui import Select
 
 from .utils import setup_driver, setup_logging, is_booking_enabled
 from .exceptions import PlayerSelectionExhaustedError
+from .navigation_strategy import get_navigation_strategy
 
 
 class PadelBooker:
     """Automated padel court booking system."""
 
-    def __init__(self, logger_name: str = "padel_booker"):
-        """Initialize the PadelBooker with logger and driver setup."""
+    def __init__(self, logger_name: str = "padel_booker", device_mode: str = "mobile"):
+        """Initialize the PadelBooker with logger and driver setup.
+
+        Args:
+            logger_name: Name for the logger
+            device_mode: Either 'mobile' or 'desktop' (default: 'mobile')
+        """
         self.logger = setup_logging(logger_name)
-        self.driver, self.wait = setup_driver()
+        self.device_mode = device_mode
+        self.driver, self.wait = setup_driver(device_mode)
+        self.navigation_strategy = get_navigation_strategy(device_mode)
+        self.logger.info("Initialized PadelBooker in %s mode", device_mode)
 
     def __enter__(self):
         """Context manager entry."""
@@ -33,6 +41,7 @@ class PadelBooker:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - cleanup driver."""
+        _ = exc_type, exc_val, exc_tb  # Unused but required for context manager protocol
         if self.driver:
             self.driver.quit()
 
@@ -169,120 +178,22 @@ class PadelBooker:
             return {"status": "error", "message": str(e)}
 
     def go_to_date(self, target_date: str):
-        """Navigates to the target date using the calendar date picker (format: YYYY-MM-DD)."""
-        try:
-            # Parse target date
-            target_dt = dt.datetime.strptime(target_date, "%Y-%m-%d").date()
-            year = target_dt.year
-            month = target_dt.month
-            day = target_dt.day
+        """Navigates to the target date (format: YYYY-MM-DD).
 
-            self.logger.info("Navigating to date: %s", target_date)
-
-            # First, navigate to the correct month/year if needed
-            self.wait.until(
-                EC.presence_of_element_located((By.ID, "calendar_date_title"))
-            )
-
-            max_month_navigation = 24  # Prevent infinite loops
-            navigation_count = 0
-
-            while navigation_count < max_month_navigation:
-                # Get current month/year from calendar title
-                calendar_title = self.driver.find_element(
-                    By.ID, "calendar_date_title"
-                ).text.strip()
-                try:
-                    # Parse "Jul 2025" format
-                    month_names = [
-                        "Jan",
-                        "Feb",
-                        "Mar",
-                        "Apr",
-                        "May",
-                        "Jun",
-                        "Jul",
-                        "Aug",
-                        "Sep",
-                        "Oct",
-                        "Nov",
-                        "Dec",
-                    ]
-                    parts = calendar_title.split()
-                    current_month_str = parts[0]
-                    current_year = int(parts[1])
-                    current_month = month_names.index(current_month_str.title()) + 1
-                except (ValueError, IndexError) as e:
-                    self.logger.error(
-                        "Failed to parse calendar title '%s': %s", calendar_title, e
-                    )
-                    break
-
-                if current_year == year and current_month == month:
-                    # We're in the right month, now click the specific date
-                    break
-                elif (current_year < year) or (
-                    current_year == year and current_month < month
-                ):
-                    # Need to go forward
-                    next_btn = self.driver.find_element(
-                        By.CSS_SELECTOR, ".month.next a"
-                    )
-                    next_btn.click()
-                else:
-                    # Need to go backward
-                    prev_btn = self.driver.find_element(
-                        By.CSS_SELECTOR, ".month.prev a"
-                    )
-                    prev_btn.click()
-
-                navigation_count += 1
-                time.sleep(0.5)  # Brief pause between navigation clicks
-                self.wait.until(
-                    EC.presence_of_element_located((By.ID, "calendar_date_title"))
-                )
-
-            if navigation_count >= max_month_navigation:
-                self.logger.error("Exceeded maximum month navigation attempts")
-                return
-
-            # Now click on the specific date
-            date_id = f"cal_{year}_{month}_{day}"
-            try:
-                date_cell = self.driver.find_element(By.ID, date_id)
-                date_link = date_cell.find_element(By.CLASS_NAME, "cal-link")
-                date_link.click()
-                self.logger.info("Successfully navigated to %s", target_date)
-
-                # Wait for the matrix to load for the new date
-                time.sleep(1)
-                self.wait.until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "matrix-container"))
-                )
-
-            except (NoSuchElementException, TimeoutException) as e:
-                self.logger.error("Failed to click on date %s: %s", target_date, e)
-
-        except ValueError as e:
-            self.logger.error("Invalid date format '%s': %s", target_date, e)
-        except (NoSuchElementException, TimeoutException) as e:
-            self.logger.error("Error navigating to date: %s", e)
+        Uses the appropriate navigation strategy based on device mode.
+        """
+        self.navigation_strategy.navigate_to_date(
+            self.driver, self.wait, self.logger, target_date
+        )
 
     def wait_for_matrix_date(self, target_date: str):
-        """Waits until the matrix table is showing the correct date."""
+        """Waits until the matrix table is showing the correct date.
 
-        def date_matches(driver):
-            date_title = driver.find_element(By.ID, "matrix_date_title").text.strip()
-            try:
-                date_str = date_title.split()[-1]
-                current_date = dt.datetime.strptime(date_str, "%d-%m-%Y").date()
-                target_dt = dt.datetime.strptime(target_date, "%Y-%m-%d").date()
-                return current_date == target_dt
-            except (ValueError, IndexError) as e:
-                self.logger.warning("Error parsing date in wait_for_matrix_date: %s", e)
-                return False
-
-        self.wait.until(date_matches)
+        Uses the appropriate navigation strategy based on device mode.
+        """
+        self.navigation_strategy.wait_for_matrix_date(
+            self.driver, self.wait, self.logger, target_date
+        )
 
     def find_consecutive_slots(self, start_time: str, duration_hours: float):
         """Finds a court with enough consecutive free slots starting at start_time to cover duration_hours."""
