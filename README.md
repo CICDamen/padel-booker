@@ -1,5 +1,10 @@
 # 🎾 padel-booker
 
+[![CI](https://github.com/CICDamen/padel-booker/actions/workflows/ci.yml/badge.svg)](https://github.com/CICDamen/padel-booker/actions/workflows/ci.yml)
+[![Docker Build](https://github.com/CICDamen/padel-booker/actions/workflows/docker.yml/badge.svg)](https://github.com/CICDamen/padel-booker/actions/workflows/docker.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 Automated padel court booking API for Sportclub Houten, powered by FastAPI and Selenium.
 
 ---
@@ -132,9 +137,21 @@ Content-Type: application/json
   "start_time": "21:30",
   "duration_hours": 1.5,
   "booker_first_name": "John",
-  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
+  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"],
+  "device_mode": "mobile"
 }
 ```
+
+**Parameters:**
+- `login_url`: URL to the booking website
+- `booking_date`: Date to book in YYYY-MM-DD format
+- `start_time`: Start time in HH:MM format
+- `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
+- `booker_first_name`: First name of the person making the booking
+- `player_candidates`: Array of player names to try for the booking
+- `device_mode` (optional): Either `"mobile"` (default) or `"desktop"`
+  - **Mobile mode**: Allows booking 29 days in advance, uses mobile-optimized navigation
+  - **Desktop mode**: Allows booking 28 days in advance, uses calendar-based navigation
 
 **Response:**
 ```json
@@ -192,7 +209,7 @@ Authorization: Basic base64(username:password)
 # Check health
 curl http://localhost:8080/health
 
-# Start booking
+# Start booking (mobile mode - 29 days advance)
 curl -u admin:password \
   -H "Content-Type: application/json" \
   -d '{
@@ -201,7 +218,22 @@ curl -u admin:password \
     "start_time": "21:30",
     "duration_hours": 1.5,
     "booker_first_name": "John",
-    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"]
+    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"],
+    "device_mode": "mobile"
+  }' \
+  http://localhost:8080/api/book
+
+# Start booking (desktop mode - 28 days advance)
+curl -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login_url": "https://houten.baanreserveren.nl/",
+    "booking_date": "2025-07-28",
+    "start_time": "21:30",
+    "duration_hours": 1.5,
+    "booker_first_name": "John",
+    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"],
+    "device_mode": "desktop"
   }' \
   http://localhost:8080/api/book
 
@@ -211,9 +243,135 @@ curl -u admin:password http://localhost:8080/api/status
 
 ---
 
+## 🧪 Testing
+
+The project uses pytest with comprehensive test coverage across all modules.
+
+### Test Summary
+
+**75 tests total:**
+- **66 unit tests** (fast, no browser) - 2.7s
+- **9 integration tests** (requires browser) - 18.4s
+
+### Running Tests
+
+**Run all tests:**
+```bash
+pytest
+```
+
+**Run only unit tests (fast, no browser needed):**
+```bash
+pytest -m unit
+```
+
+**Run only integration tests (requires browser and credentials):**
+```bash
+pytest -m integration
+```
+
+**Run with verbose output:**
+```bash
+pytest -v
+```
+
+**Run specific test file:**
+```bash
+pytest tests/test_api.py
+pytest tests/test_utils.py
+pytest tests/test_models.py
+```
+
+### Test Structure
+
+```
+tests/
+├── __init__.py
+├── conftest.py                    # Pytest fixtures and configuration
+├── test_api.py                    # FastAPI endpoint tests (12 tests)
+├── test_booker.py                 # PadelBooker class tests (11 tests)
+├── test_device_modes.py           # Integration tests for mobile/desktop (11 tests)
+├── test_exceptions.py             # Custom exception tests (6 tests)
+├── test_models.py                 # Pydantic model tests (10 tests)
+├── test_navigation_strategy.py    # Navigation strategy tests (9 tests)
+└── test_utils.py                  # Utility function tests (16 tests)
+```
+
+### Test Coverage by Module
+
+- **api.py**: Endpoint authentication, booking flow, status checks
+- **booker.py**: Initialization, slot finding, player selection, context manager
+- **models.py**: Pydantic validation, device mode, field requirements
+- **utils.py**: Driver setup, logging, authentication, booking enabled flag
+- **navigation_strategy.py**: Mobile/desktop strategies, factory pattern
+- **exceptions.py**: Custom exception behavior and inheritance
+
+### Configuration
+
+Pytest configuration is in `pyproject.toml` under `[tool.pytest.ini_options]`.
+
+Test markers:
+- `@pytest.mark.unit` - Fast tests with mocks (no browser)
+- `@pytest.mark.integration` - Full tests with real browser
+- `@pytest.mark.slow` - Long-running tests
+
+### Running Tests in Docker
+
+```bash
+docker run --rm \
+  -v "$(pwd)/tests:/app/tests" \
+  -v "$(pwd)/pyproject.toml:/app/pyproject.toml" \
+  -e BOOKER_USERNAME="your_username" \
+  -e BOOKER_PASSWORD="your_password" \
+  -e CHROMEDRIVER_PATH="/usr/bin/chromedriver" \
+  padel-booker \
+  uv run pytest
+```
+
+---
+
+## 🔄 CI/CD
+
+The project uses GitHub Actions for continuous integration and deployment.
+
+### Workflows
+
+**CI Workflow** (runs on PRs and main branch):
+- **Lint**: Code formatting check with black
+- **Unit Tests**: Fast tests without browser (66 tests, ~3s)
+- **Integration Tests**: Full browser tests (9 tests, ~20s)
+- **Test Summary**: Aggregated results
+
+**Docker Workflow** (runs on PRs and main branch):
+- **Build**: Verify Docker image builds successfully
+- **Test**: Run unit tests inside Docker container
+
+### Required Secrets
+
+For integration tests to run in CI, configure these GitHub secrets:
+- `BOOKER_USERNAME`: Booking platform username
+- `BOOKER_PASSWORD`: Booking platform password
+
+**Note**: Integration tests are automatically skipped if credentials are not configured.
+
+### Branch Protection
+
+Recommended branch protection rules for `main`:
+- ✅ Require pull request reviews
+- ✅ Require status checks (CI, Docker Build)
+- ✅ Require branches to be up to date
+
+---
+
 ## 🤝 Contributing
 
 Pull requests and suggestions are welcome! Please open an issue to discuss your ideas or report bugs.
+
+**All PRs will automatically run:**
+- Code formatting checks (black)
+- Unit tests (66 tests)
+- Integration tests (9 tests, if credentials configured)
+- Docker build verification
 
 ---
 

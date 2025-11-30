@@ -13,8 +13,38 @@ dependencies = [
     "uvicorn>=0.24.0",
     "selenium>=4.34.2",
     "fastapi>=0.116.1",
+    "pytest>=8.0.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.27.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.pytest.ini_options]
+# Test discovery patterns
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+# Output options
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings",
+]
+
+# Test paths
+testpaths = ["tests"]
+
+# Markers for organizing tests
+markers = [
+    "integration: Integration tests that require real browser and credentials",
+    "unit: Unit tests that can run with mocks",
+    "slow: Tests that take longer to run",
+]
+
+# Minimum Python version
+minversion = "8.0"

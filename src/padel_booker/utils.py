@@ -28,12 +28,23 @@ def is_booking_enabled() -> bool:
     return os.environ.get("ENABLE_BOOKING", "false").lower() == "true"
 
 
-def setup_driver() -> tuple[webdriver.Chrome, WebDriverWait]:
-    """Sets up the Selenium driver and wait with mobile emulation.
+def setup_driver(device_mode: str = "mobile") -> tuple[webdriver.Chrome, WebDriverWait]:
+    """Sets up the Selenium driver and wait with optional mobile emulation.
 
-    Mobile emulation is used because the booking website allows 29 days
-    advance booking for mobile users vs 28 days for desktop users.
+    Args:
+        device_mode: Either 'mobile' or 'desktop'. Mobile emulation allows 29 days
+                     advance booking vs 28 days for desktop users.
+
+    Returns:
+        Tuple of (driver, wait)
+
+    Raises:
+        ValueError: If device_mode is not 'mobile' or 'desktop'
+        RuntimeError: If CHROMEDRIVER_PATH is not set
     """
+    if device_mode not in ("mobile", "desktop"):
+        raise ValueError(f"Invalid device_mode: {device_mode}. Must be 'mobile' or 'desktop'")
+
     chrome_options = Options()
 
     # Use Chrome options from environment variable if available
@@ -47,9 +58,10 @@ def setup_driver() -> tuple[webdriver.Chrome, WebDriverWait]:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # Enable mobile emulation to get 29 days advance booking (vs 28 days for desktop)
-    mobile_emulation = {"deviceName": "iPhone 12 Pro"}
-    chrome_options.add_experimental_option("mobileEmulation", mobile_emulation)
+    # Enable mobile emulation only for mobile mode
+    if device_mode == "mobile":
+        mobile_emulation = {"deviceName": "iPhone 12 Pro"}
+        chrome_options.add_experimental_option("mobileEmulation", mobile_emulation)
 
     # Set path to ChromeDriver from environment variable
     chrome_driver_path = os.getenv("CHROMEDRIVER_PATH")
@@ -104,8 +116,22 @@ def run_booking_background(
     booker_first_name: str,
     player_candidates: list[str],
     booking_status: Dict,
+    device_mode: str = "mobile",
 ):
-    """Run booking in background thread."""
+    """Run booking in background thread.
+
+    Args:
+        username: Login username
+        password: Login password
+        login_url: URL to login page
+        booking_date: Date to book (YYYY-MM-DD)
+        start_time: Start time (HH:MM)
+        duration_hours: Duration in hours
+        booker_first_name: First name of the person making the booking
+        player_candidates: List of player names to try
+        booking_status: Shared dict to track booking status
+        device_mode: Either 'mobile' or 'desktop' (default: 'mobile')
+    """
     from .booker import PadelBooker
 
     try:
@@ -120,7 +146,7 @@ def run_booking_background(
             }
             return
 
-        with PadelBooker() as booker:
+        with PadelBooker(device_mode=device_mode) as booker:
             # Login
             if not booker.login(username, password, login_url):
                 booking_status["result"] = {
