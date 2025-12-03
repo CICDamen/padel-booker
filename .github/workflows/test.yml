@@ -59,7 +59,7 @@ jobs:
             -e BOOKER_PASSWORD="$BOOKER_PASSWORD" \
             -e CHROMEDRIVER_PATH="/usr/bin/chromedriver" \
             padel-booker:test \
-            uv run pytest -m integration -v --tb=short
+            bash -c "uv run pytest -m integration -v --tb=short || ([ \$? -eq 5 ] && echo '⚠️  No integration tests found' && exit 0)"
 
       - name: Test results summary
         if: always()

@@ -13,7 +13,8 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **RESTful API** for automated court booking
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
-- Smart slot and player selection with rotation and error handling
+- **Smart slot fallback**: Automatically searches backwards through workdays if preferred date unavailable
+- Smart player selection with rotation and error handling
 - **Flexible booking parameters** passed directly via API
 - Headless browser automation (no UI required)
 - **Docker support** for easy deployment
@@ -136,21 +137,17 @@ Content-Type: application/json
   "start_time": "21:30",
   "duration_hours": 1.5,
   "booker_first_name": "John",
-  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"],
-  "device_mode": "mobile"
+  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
 }
 ```
 
 **Parameters:**
 - `login_url`: URL to the booking website
-- `booking_date`: Date to book in YYYY-MM-DD format
+- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches backwards through workdays if unavailable)
 - `start_time`: Start time in HH:MM format
 - `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
 - `booker_first_name`: First name of the person making the booking
 - `player_candidates`: Array of player names to try for the booking
-- `device_mode` (optional): Either `"mobile"` (default) or `"desktop"`
-  - **Mobile mode**: Allows booking 29 days in advance, uses mobile-optimized navigation
-  - **Desktop mode**: Allows booking 28 days in advance, uses calendar-based navigation
 
 **Response:**
 ```json
@@ -208,7 +205,7 @@ Authorization: Basic base64(username:password)
 # Check health
 curl http://localhost:8080/health
 
-# Start booking (mobile mode - 29 days advance)
+# Start booking
 curl -u admin:password \
   -H "Content-Type: application/json" \
   -d '{
@@ -217,22 +214,7 @@ curl -u admin:password \
     "start_time": "21:30",
     "duration_hours": 1.5,
     "booker_first_name": "John",
-    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"],
-    "device_mode": "mobile"
-  }' \
-  http://localhost:8080/api/book
-
-# Start booking (desktop mode - 28 days advance)
-curl -u admin:password \
-  -H "Content-Type: application/json" \
-  -d '{
-    "login_url": "https://houten.baanreserveren.nl/",
-    "booking_date": "2025-07-28",
-    "start_time": "21:30",
-    "duration_hours": 1.5,
-    "booker_first_name": "John",
-    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"],
-    "device_mode": "desktop"
+    "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"]
   }' \
   http://localhost:8080/api/book
 
@@ -248,37 +230,37 @@ The project uses pytest with comprehensive test coverage across all modules.
 
 ### Test Summary
 
-**75 tests total:**
-- **66 unit tests** (fast, no browser) - 2.7s
-- **9 integration tests** (requires browser) - 18.4s
+**61 tests total:**
+- **59 unit tests** (fast, no browser, mocked) - ~2.3s
+- **2 integration tests** (requires browser and credentials) - ~varies
 
 ### Running Tests
 
 **Run all tests:**
 ```bash
-pytest
+uv run pytest
 ```
 
 **Run only unit tests (fast, no browser needed):**
 ```bash
-pytest -m unit
+uv run pytest -m unit
 ```
 
 **Run only integration tests (requires browser and credentials):**
 ```bash
-pytest -m integration
+uv run pytest -m integration
 ```
 
 **Run with verbose output:**
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 **Run specific test file:**
 ```bash
-pytest tests/test_api.py
-pytest tests/test_utils.py
-pytest tests/test_models.py
+uv run pytest tests/test_api.py
+uv run pytest tests/test_booker.py
+uv run pytest tests/test_utils.py
 ```
 
 ### Test Structure
@@ -286,23 +268,36 @@ pytest tests/test_models.py
 ```
 tests/
 ├── __init__.py
-├── conftest.py                    # Pytest fixtures and configuration
-├── test_api.py                    # FastAPI endpoint tests (12 tests)
-├── test_booker.py                 # PadelBooker class tests (11 tests)
-├── test_device_modes.py           # Integration tests for mobile/desktop (11 tests)
-├── test_exceptions.py             # Custom exception tests (6 tests)
-├── test_models.py                 # Pydantic model tests (10 tests)
-├── test_navigation_strategy.py    # Navigation strategy tests (9 tests)
-└── test_utils.py                  # Utility function tests (16 tests)
+├── conftest.py                           # Pytest fixtures and configuration
+├── test_api.py                           # FastAPI endpoint tests (9 tests)
+├── test_booker.py                        # PadelBooker class tests (14 tests)
+├── test_integration_booking_flow.py      # Integration tests (2 tests)
+├── test_exceptions.py                    # Custom exception tests (6 tests)
+├── test_models.py                        # Pydantic model tests (7 tests)
+├── test_navigation_strategy.py           # Navigation strategy tests (9 tests)
+└── test_utils.py                         # Utility function tests (13 tests)
 ```
+
+### Integration Tests
+
+Integration tests require:
+- Real browser (ChromeDriver)
+- Valid credentials (BOOKER_USERNAME, BOOKER_PASSWORD)
+- Network access to booking website
+
+**What they test:**
+- `test_full_booking_flow_without_confirmation`: Tests the complete booking flow (login → navigate → find slot → select players → reach confirmation) **without** clicking the final "Bevestigen" button, so no actual booking is made
+- `test_booking_flow_with_fallback_dates`: Tests the backwards day search functionality with real website interaction
+
+**Note**: Integration tests will be skipped if credentials are not provided.
 
 ### Test Coverage by Module
 
 - **api.py**: Endpoint authentication, booking flow, status checks
-- **booker.py**: Initialization, slot finding, player selection, context manager
-- **models.py**: Pydantic validation, device mode, field requirements
+- **booker.py**: Initialization, slot finding, player selection, context manager, backwards day search
+- **models.py**: Pydantic validation, field requirements
 - **utils.py**: Driver setup, logging, authentication, booking enabled flag
-- **navigation_strategy.py**: Mobile/desktop strategies, factory pattern
+- **navigation_strategy.py**: Desktop navigation strategies, factory pattern
 - **exceptions.py**: Custom exception behavior and inheritance
 
 ### Configuration
@@ -335,15 +330,12 @@ The project uses GitHub Actions for continuous integration and deployment.
 
 ### Workflows
 
-**CI Workflow** (runs on PRs and main branch):
-- **Lint**: Code formatting check with black
-- **Unit Tests**: Fast tests without browser (66 tests, ~3s)
-- **Integration Tests**: Full browser tests (9 tests, ~20s)
-- **Test Summary**: Aggregated results
-
-**Docker Workflow** (runs on PRs and main branch):
+**Docker Build & Test Workflow** (runs on PRs):
 - **Build**: Verify Docker image builds successfully
-- **Test**: Run unit tests inside Docker container
+- **Import Test**: Verify Python imports work correctly
+- **Unit Tests**: Fast tests without browser (59 tests, ~2.3s)
+- **Integration Tests**: Full browser tests (2 tests, if credentials configured)
+- **Test Summary**: Aggregated results
 
 ### Required Secrets
 
@@ -351,7 +343,9 @@ For integration tests to run in CI, configure these GitHub secrets:
 - `BOOKER_USERNAME`: Booking platform username
 - `BOOKER_PASSWORD`: Booking platform password
 
-**Note**: Integration tests are automatically skipped if credentials are not configured.
+**Note**: Integration tests are automatically skipped if:
+- Credentials are not configured
+- No integration tests exist in the test suite
 
 ### Branch Protection
 
@@ -367,10 +361,10 @@ Recommended branch protection rules for `main`:
 Pull requests and suggestions are welcome! Please open an issue to discuss your ideas or report bugs.
 
 **All PRs will automatically run:**
-- Code formatting checks (black)
-- Unit tests (66 tests)
-- Integration tests (9 tests, if credentials configured)
 - Docker build verification
+- Import tests
+- Unit tests (59 tests)
+- Integration tests (2 tests, if credentials configured)
 
 ---
 

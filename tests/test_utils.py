@@ -48,16 +48,16 @@ class TestSetupDriver:
     @patch("padel_booker.utils.webdriver.Chrome")
     @patch("padel_booker.utils.Service")
     @patch("padel_booker.utils.WebDriverWait")
-    def test_mobile_mode(self, mock_wait, mock_service, mock_chrome, monkeypatch):
-        """Test driver setup in mobile mode."""
+    def test_setup_driver_creates_driver(self, mock_wait, mock_service, mock_chrome, monkeypatch):
+        """Test driver setup creates driver and wait."""
         monkeypatch.setenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
 
         mock_driver_instance = Mock()
         mock_chrome.return_value = mock_driver_instance
 
-        driver, wait = setup_driver(device_mode="mobile")
+        driver, wait = setup_driver()
 
-        # Verify mobile emulation was configured
+        # Verify driver was created
         mock_chrome.assert_called_once()
         call_kwargs = mock_chrome.call_args[1]
         assert "options" in call_kwargs
@@ -66,50 +66,12 @@ class TestSetupDriver:
         assert driver == mock_driver_instance
         mock_wait.assert_called_once_with(mock_driver_instance, 10)
 
-    @patch("padel_booker.utils.webdriver.Chrome")
-    @patch("padel_booker.utils.Service")
-    @patch("padel_booker.utils.WebDriverWait")
-    def test_desktop_mode(self, mock_wait, mock_service, mock_chrome, monkeypatch):
-        """Test driver setup in desktop mode."""
-        monkeypatch.setenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
-
-        mock_driver_instance = Mock()
-        mock_chrome.return_value = mock_driver_instance
-
-        driver, wait = setup_driver(device_mode="desktop")
-
-        # Verify driver was created
-        mock_chrome.assert_called_once()
-        assert driver == mock_driver_instance
-
-    def test_invalid_mode_raises_error(self, monkeypatch):
-        """Test that invalid device mode raises ValueError."""
-        monkeypatch.setenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
-
-        with pytest.raises(ValueError, match="Invalid device_mode"):
-            setup_driver(device_mode="tablet")
-
     def test_missing_chromedriver_path_raises_error(self, monkeypatch):
         """Test that missing CHROMEDRIVER_PATH raises RuntimeError."""
         monkeypatch.delenv("CHROMEDRIVER_PATH", raising=False)
 
         with pytest.raises(RuntimeError, match="CHROMEDRIVER_PATH"):
-            setup_driver(device_mode="mobile")
-
-    @patch("padel_booker.utils.webdriver.Chrome")
-    @patch("padel_booker.utils.Service")
-    @patch("padel_booker.utils.WebDriverWait")
-    def test_default_mode_is_mobile(self, mock_wait, mock_service, mock_chrome, monkeypatch):
-        """Test that default device mode is mobile."""
-        monkeypatch.setenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
-
-        mock_driver_instance = Mock()
-        mock_chrome.return_value = mock_driver_instance
-
-        driver, wait = setup_driver()  # No device_mode specified
-
-        # Should succeed (mobile is default)
-        assert driver == mock_driver_instance
+            setup_driver()
 
 
 @pytest.mark.unit

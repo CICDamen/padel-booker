@@ -2,7 +2,7 @@
 import os
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Any
 
 from selenium.webdriver.common.by import By
@@ -16,24 +16,22 @@ from selenium.webdriver.support.ui import Select
 
 from .utils import setup_driver, setup_logging, is_booking_enabled
 from .exceptions import PlayerSelectionExhaustedError
-from .navigation_strategy import get_navigation_strategy
+from .navigation_strategy import DesktopNavigationStrategy
 
 
 class PadelBooker:
     """Automated padel court booking system."""
 
-    def __init__(self, logger_name: str = "padel_booker", device_mode: str = "mobile"):
+    def __init__(self, logger_name: str = "padel_booker"):
         """Initialize the PadelBooker with logger and driver setup.
 
         Args:
             logger_name: Name for the logger
-            device_mode: Either 'mobile' or 'desktop' (default: 'mobile')
         """
         self.logger = setup_logging(logger_name)
-        self.device_mode = device_mode
-        self.driver, self.wait = setup_driver(device_mode)
-        self.navigation_strategy = get_navigation_strategy(device_mode)
-        self.logger.info("Initialized PadelBooker in %s mode", device_mode)
+        self.driver, self.wait = setup_driver()
+        self.navigation_strategy = DesktopNavigationStrategy()
+        self.logger.info("Initialized PadelBooker")
 
     def __enter__(self):
         """Context manager entry."""
@@ -256,6 +254,52 @@ class PadelBooker:
 
         self.logger.info("No consecutive slots found for the requested duration")
         return None, None
+
+    def find_consecutive_slots_with_fallback(
+        self, target_date: str, start_time: str, duration_hours: float, max_days_back: int = 28
+    ):
+        """Finds consecutive slots with fallback to previous workdays.
+
+        Searches for available slots on the target date first. If no slots are found
+        and the target date is a workday (Monday-Friday), searches backwards one day
+        at a time (skipping weekends) until a slot is found or max_days_back is reached.
+
+        Args:
+            target_date: Initial date to search (YYYY-MM-DD)
+            start_time: Start time for the slot (HH:MM)
+            duration_hours: Duration in hours
+            max_days_back: Maximum number of days to search backwards (default: 28)
+
+        Returns:
+            Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
+        """
+        current_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        days_searched = 0
+
+        while days_searched <= max_days_back:
+            # Only search on workdays (Monday=0 to Friday=4)
+            if current_date.weekday() < 5:
+                date_str = current_date.strftime("%Y-%m-%d")
+                self.logger.info("Searching for slots on %s", date_str)
+
+                # Navigate to this date
+                self.go_to_date(date_str)
+                self.wait_for_matrix_date(date_str)
+
+                # Try to find slots
+                slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
+
+                if slot:
+                    self.logger.info("Found slot on %s", date_str)
+                    return slot, end_time, date_str
+
+                days_searched += 1
+
+            # Move back one day
+            current_date -= timedelta(days=1)
+
+        self.logger.info("No slots found after searching %d workdays backwards", days_searched)
+        return None, None, None
 
     def try_booking_with_player_rotation(
         self, player_candidates: list[str], booker_first_name: str
