@@ -1,7 +1,7 @@
 """Pydantic models for the Padel Booker API."""
 
-from pydantic import BaseModel, Field
-from typing import List, Literal
+from pydantic import BaseModel
+from typing import List
 
 
 class BookingRequest(BaseModel):
@@ -11,10 +11,6 @@ class BookingRequest(BaseModel):
     duration_hours: float
     booker_first_name: str
     player_candidates: List[str]
-    device_mode: Literal["mobile", "desktop"] = Field(
-        default="mobile",
-        description="Device mode for booking: 'mobile' (29 days advance) or 'desktop' (28 days advance)"
-    )
 
 
 class ConfigModel(BaseModel):

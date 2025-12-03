@@ -76,28 +76,6 @@ class TestBookingEndpoint:
         data = response.json()
         assert data["status"] == "started"
         assert "started_at" in data
-        assert data["device_mode"] == "mobile"  # Default
-
-    @patch("padel_booker.api.threading.Thread")
-    def test_book_with_desktop_mode(self, mock_thread, client, mock_env):
-        """Test booking with desktop device mode."""
-        response = client.post(
-            "/api/book",
-            json={
-                "login_url": "https://example.com",
-                "booking_date": "2025-12-01",
-                "start_time": "21:30",
-                "duration_hours": 1.5,
-                "booker_first_name": "John",
-                "player_candidates": ["John Doe"],
-                "device_mode": "desktop",
-            },
-            auth=("admin", "secret"),
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["device_mode"] == "desktop"
 
     def test_book_with_wrong_credentials(self, client, mock_env):
         """Test booking with wrong credentials."""

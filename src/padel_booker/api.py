@@ -50,7 +50,6 @@ async def book_court(
             request.booker_first_name,
             request.player_candidates,
             booking_status,
-            request.device_mode,
         ),
     )
     thread.start()
@@ -59,7 +58,6 @@ async def book_court(
         "status": "started",
         "message": "Booking process started",
         "started_at": booking_status["started_at"],
-        "device_mode": request.device_mode,
     }
 
 

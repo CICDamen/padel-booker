@@ -12,48 +12,34 @@ from padel_booker.booker import PadelBooker
 class TestPadelBookerInit:
     """Test PadelBooker initialization."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_init_mobile_mode(self, mock_strategy, mock_logging, mock_setup_driver):
-        """Test PadelBooker initializes correctly in mobile mode."""
+    def test_init_creates_booker(self, mock_logging, mock_setup_driver, mock_strategy_class):
+        """Test PadelBooker initializes correctly."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
         mock_logger = Mock()
         mock_logging.return_value = mock_logger
 
-        booker = PadelBooker(device_mode="mobile")
+        booker = PadelBooker()
 
-        assert booker.device_mode == "mobile"
-        mock_setup_driver.assert_called_once_with("mobile")
-        mock_strategy.assert_called_once_with("mobile")
+        assert booker.driver == mock_driver
+        assert booker.wait == mock_wait
+        mock_setup_driver.assert_called_once()
+        mock_strategy_class.assert_called_once()
         mock_logging.assert_called_once()
-
-    @patch("padel_booker.booker.setup_driver")
-    @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_init_desktop_mode(self, mock_strategy, mock_logging, mock_setup_driver):
-        """Test PadelBooker initializes correctly in desktop mode."""
-        mock_driver = Mock()
-        mock_wait = Mock()
-        mock_setup_driver.return_value = (mock_driver, mock_wait)
-
-        booker = PadelBooker(device_mode="desktop")
-
-        assert booker.device_mode == "desktop"
-        mock_setup_driver.assert_called_once_with("desktop")
-        mock_strategy.assert_called_once_with("desktop")
 
 
 @pytest.mark.unit
 class TestPadelBookerCheckAvailability:
     """Test check_availability method."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_slot_found(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_slot_found(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test when matching slot is found."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -73,10 +59,10 @@ class TestPadelBookerCheckAvailability:
 
         assert result == mock_slot
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_no_slot_found(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_no_slot_found(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test when no matching slot is found."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -101,10 +87,10 @@ class TestPadelBookerCheckAvailability:
 class TestPadelBookerSelectPlayers:
     """Test select_players method."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_select_three_players(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_select_three_players(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test selecting three players successfully."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -147,10 +133,10 @@ class TestPadelBookerSelectPlayers:
 class TestPadelBookerFindConsecutiveSlots:
     """Test find_consecutive_slots method."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_consecutive_slots_found(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_consecutive_slots_found(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test finding consecutive slots for duration."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -178,10 +164,10 @@ class TestPadelBookerFindConsecutiveSlots:
         assert slot == mock_slot1
         assert end_time == "23:00"
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_no_consecutive_slots(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_no_consecutive_slots(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test when no consecutive slots are found."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -214,10 +200,10 @@ class TestPadelBookerFindConsecutiveSlots:
 class TestPadelBookerContextManager:
     """Test PadelBooker context manager."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_context_manager_enter(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_context_manager_enter(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test context manager __enter__."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -228,10 +214,10 @@ class TestPadelBookerContextManager:
         result = booker.__enter__()
         assert result == booker
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_context_manager_exit(self, mock_strategy, mock_logging, mock_setup_driver):
+    def test_context_manager_exit(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test context manager __exit__ calls driver.quit()."""
         mock_driver = Mock()
         mock_wait = Mock()
@@ -247,36 +233,148 @@ class TestPadelBookerContextManager:
 class TestPadelBookerDelegation:
     """Test that PadelBooker delegates to navigation strategy."""
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_go_to_date_delegates_to_strategy(self, mock_get_strategy, mock_logging, mock_setup_driver):
+    def test_go_to_date_delegates_to_strategy(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test go_to_date delegates to navigation strategy."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         mock_strategy = Mock()
-        mock_get_strategy.return_value = mock_strategy
+        mock_strategy_class.return_value = mock_strategy
 
         booker = PadelBooker()
         booker.go_to_date("2025-12-01")
 
         mock_strategy.navigate_to_date.assert_called_once()
 
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    @patch("padel_booker.booker.get_navigation_strategy")
-    def test_wait_for_matrix_date_delegates_to_strategy(self, mock_get_strategy, mock_logging, mock_setup_driver):
+    def test_wait_for_matrix_date_delegates_to_strategy(self, mock_logging, mock_setup_driver, mock_strategy_class):
         """Test wait_for_matrix_date delegates to navigation strategy."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         mock_strategy = Mock()
-        mock_get_strategy.return_value = mock_strategy
+        mock_strategy_class.return_value = mock_strategy
 
         booker = PadelBooker()
         booker.wait_for_matrix_date("2025-12-01")
 
         mock_strategy.wait_for_matrix_date.assert_called_once()
+
+
+@pytest.mark.unit
+class TestPadelBookerBackwardsDaySearch:
+    """Test backwards day search for workdays when slots not available."""
+
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_finds_slot_on_previous_workday_when_original_day_unavailable(
+        self, mock_logging, mock_setup_driver, mock_strategy_class
+    ):
+        """Test that when slot not available on Friday, searches back to Thursday."""
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock slot on Thursday
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # First call (Friday 2025-12-05) returns no slots
+        # Second call (Thursday 2025-12-04) returns a slot
+        mock_driver.find_elements.side_effect = [
+            [],  # Friday - no slots
+            [mock_slot],  # Thursday - has slot
+        ]
+
+        # Mock navigation methods
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-05", "21:00", 2.0
+        )
+
+        assert slot == mock_slot
+        assert end_time == "23:00"
+        assert found_date == "2025-12-04"
+        # Should have navigated to Thursday after Friday failed
+        assert booker.go_to_date.call_count == 2
+
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_skips_weekend_when_searching_backwards(
+        self, mock_logging, mock_setup_driver, mock_strategy_class
+    ):
+        """Test that backwards search skips Saturday and Sunday."""
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock slot on Friday
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # Monday (no slots) -> skip Sat/Sun -> Friday (has slot)
+        mock_driver.find_elements.side_effect = [
+            [],  # Monday 2025-12-08 - no slots
+            [mock_slot],  # Friday 2025-12-05 - has slot
+        ]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-08", "21:00", 2.0
+        )
+
+        assert slot == mock_slot
+        assert end_time == "23:00"
+        assert found_date == "2025-12-05"
+        # Should have navigated to Monday and then Friday (skipping weekend)
+        assert booker.go_to_date.call_count == 2
+
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_returns_none_when_no_slots_found_after_searching_backwards(
+        self, mock_logging, mock_setup_driver, mock_strategy_class
+    ):
+        """Test returns None when no slots found after searching backwards."""
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # No slots on any day
+        mock_driver.find_elements.return_value = []
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-05", "21:00", 2.0, max_days_back=3
+        )
+
+        assert slot is None
+        assert end_time is None
+        assert found_date is None

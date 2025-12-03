@@ -28,23 +28,15 @@ def is_booking_enabled() -> bool:
     return os.environ.get("ENABLE_BOOKING", "false").lower() == "true"
 
 
-def setup_driver(device_mode: str = "mobile") -> tuple[webdriver.Chrome, WebDriverWait]:
-    """Sets up the Selenium driver and wait with optional mobile emulation.
-
-    Args:
-        device_mode: Either 'mobile' or 'desktop'. Mobile emulation allows 29 days
-                     advance booking vs 28 days for desktop users.
+def setup_driver() -> tuple[webdriver.Chrome, WebDriverWait]:
+    """Sets up the Selenium driver and wait.
 
     Returns:
         Tuple of (driver, wait)
 
     Raises:
-        ValueError: If device_mode is not 'mobile' or 'desktop'
         RuntimeError: If CHROMEDRIVER_PATH is not set
     """
-    if device_mode not in ("mobile", "desktop"):
-        raise ValueError(f"Invalid device_mode: {device_mode}. Must be 'mobile' or 'desktop'")
-
     chrome_options = Options()
 
     # Use Chrome options from environment variable if available
@@ -57,16 +49,6 @@ def setup_driver(device_mode: str = "mobile") -> tuple[webdriver.Chrome, WebDriv
         chrome_options.add_argument("--headless")  # Run in background
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-
-    # Enable mobile emulation only for mobile mode
-    # Use explicit device metrics and user-agent to ensure the website
-    # recognizes this as a mobile device (allows 29 days advance booking)
-    if device_mode == "mobile":
-        mobile_emulation = {
-            "deviceMetrics": {"width": 390, "height": 844, "pixelRatio": 3.0},
-            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
-        }
-        chrome_options.add_experimental_option("mobileEmulation", mobile_emulation)
 
     # Set path to ChromeDriver from environment variable
     chrome_driver_path = os.getenv("CHROMEDRIVER_PATH")
@@ -121,7 +103,6 @@ def run_booking_background(
     booker_first_name: str,
     player_candidates: list[str],
     booking_status: Dict,
-    device_mode: str = "mobile",
 ):
     """Run booking in background thread.
 
@@ -135,7 +116,6 @@ def run_booking_background(
         booker_first_name: First name of the person making the booking
         player_candidates: List of player names to try
         booking_status: Shared dict to track booking status
-        device_mode: Either 'mobile' or 'desktop' (default: 'mobile')
     """
     from .booker import PadelBooker
 
@@ -151,7 +131,7 @@ def run_booking_background(
             }
             return
 
-        with PadelBooker(device_mode=device_mode) as booker:
+        with PadelBooker() as booker:
             # Login
             if not booker.login(username, password, login_url):
                 booking_status["result"] = {
@@ -160,21 +140,20 @@ def run_booking_background(
                 }
                 return
 
-            # Navigate to booking date from input
-            booker.go_to_date(booking_date)
-            booker.wait_for_matrix_date(booking_date)
-
-            # Find consecutive slots
-            slot, end_time = booker.find_consecutive_slots(
-                start_time, duration_hours
+            # Find consecutive slots with fallback to previous workdays
+            slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+                booking_date, start_time, duration_hours
             )
 
             if not slot:
                 booking_status["result"] = {
                     "status": "error",
-                    "message": f"No available slots found for {start_time} on {booking_date}",
+                    "message": f"No available slots found for {start_time} on or before {booking_date}",
                 }
                 return
+
+            # Update booking_date to the date where slot was actually found
+            booking_date = found_date
 
             # Try booking
             selected_players = booker.book_slot(
