@@ -27,12 +27,6 @@ def tomorrow_date():
     return (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
 
-@pytest.fixture(params=["mobile", "desktop"])
-def device_mode(request):
-    """Parametrized fixture for testing both device modes."""
-    return request.param
-
-
 @pytest.fixture
 def chromedriver_path():
     """Fixture providing chromedriver path."""
