@@ -258,47 +258,84 @@ class PadelBooker:
     def find_consecutive_slots_with_fallback(
         self, target_date: str, start_time: str, duration_hours: float, max_days_back: int = 28
     ):
-        """Finds consecutive slots with fallback to previous workdays.
+        """Finds consecutive slots with fallback, avoiding Friday and weekends.
 
-        Searches for available slots on the target date first. If no slots are found
-        and the target date is a workday (Monday-Friday), searches backwards one day
-        at a time (skipping weekends) until a slot is found or max_days_back is reached.
+        Searches for available slots on the target date first (if it's a valid weekday).
+        If no slots are found, searches forward first, then backwards.
+        Only searches on Monday-Thursday (avoiding Friday and weekends).
 
         Args:
             target_date: Initial date to search (YYYY-MM-DD)
             start_time: Start time for the slot (HH:MM)
             duration_hours: Duration in hours
-            max_days_back: Maximum number of days to search backwards (default: 28)
+            max_days_back: Maximum number of weekdays to search in each direction (default: 28).
+                          Note: This parameter name is kept for backward compatibility but applies
+                          to both forward and backward searches.
 
         Returns:
             Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
         """
-        current_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+        
+        # Try the target date first if it's Monday-Thursday
+        if target_dt.weekday() < 4:
+            self.logger.info("Searching for slots on target date %s", target_date)
+            self.go_to_date(target_date)
+            self.wait_for_matrix_date(target_date)
+            slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
+            if slot:
+                self.logger.info("Found slot on target date %s", target_date)
+                return slot, end_time, target_date
+            self.logger.info("No slot found on target date, searching forward...")
+        else:
+            self.logger.info("Target date %s is Friday/weekend, skipping to forward search", target_date)
+        
+        # Search forward first
+        current_date = target_dt + timedelta(days=1)
         days_searched = 0
-
-        while days_searched <= max_days_back:
-            # Only search on workdays (Monday=0 to Friday=4)
-            if current_date.weekday() < 5:
+        
+        while days_searched < max_days_back:
+            # Only search on Monday-Thursday (weekday 0-3)
+            if current_date.weekday() < 4:
                 date_str = current_date.strftime("%Y-%m-%d")
-                self.logger.info("Searching for slots on %s", date_str)
-
-                # Navigate to this date
+                self.logger.info("Searching for slots on %s (forward)", date_str)
+                
                 self.go_to_date(date_str)
                 self.wait_for_matrix_date(date_str)
-
-                # Try to find slots
                 slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
-
+                
                 if slot:
-                    self.logger.info("Found slot on %s", date_str)
+                    self.logger.info("Found slot on %s (forward search)", date_str)
                     return slot, end_time, date_str
-
+                
                 days_searched += 1
-
-            # Move back one day
+            
+            current_date += timedelta(days=1)
+        
+        # If no slots found forward, search backward
+        self.logger.info("No slot found forward, searching backward...")
+        current_date = target_dt - timedelta(days=1)
+        days_searched = 0
+        
+        while days_searched < max_days_back:
+            # Only search on Monday-Thursday (weekday 0-3)
+            if current_date.weekday() < 4:
+                date_str = current_date.strftime("%Y-%m-%d")
+                self.logger.info("Searching for slots on %s (backward)", date_str)
+                
+                self.go_to_date(date_str)
+                self.wait_for_matrix_date(date_str)
+                slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
+                
+                if slot:
+                    self.logger.info("Found slot on %s (backward search)", date_str)
+                    return slot, end_time, date_str
+                
+                days_searched += 1
+            
             current_date -= timedelta(days=1)
-
-        self.logger.info("No slots found after searching %d workdays backwards", days_searched)
+        
+        self.logger.info("No slots found after searching %d weekdays in each direction", days_searched)
         return None, None, None
 
     def try_booking_with_player_rotation(

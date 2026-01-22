@@ -269,96 +269,171 @@ class TestPadelBookerDelegation:
 
 
 @pytest.mark.unit
-class TestPadelBookerBackwardsDaySearch:
-    """Test backwards day search for workdays when slots not available."""
+class TestPadelBookerFallbackSearch:
+    """Test fallback search avoiding Friday and weekends."""
 
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    def test_finds_slot_on_previous_workday_when_original_day_unavailable(
+    def test_finds_slot_on_target_date_when_available(
         self, mock_logging, mock_setup_driver, mock_strategy_class
     ):
-        """Test that when slot not available on Friday, searches back to Thursday."""
+        """Test that slot is found on target date if available (Monday-Thursday)."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         booker = PadelBooker()
 
-        # Mock slot on Thursday
+        # Mock slot on Wednesday
         mock_slot = Mock()
         mock_period = Mock()
         mock_period.text = "21:00 - 23:00"
         mock_slot.find_element.return_value = mock_period
         mock_slot.get_attribute.return_value = "Court 1"
 
-        # First call (Friday 2025-12-05) returns no slots
-        # Second call (Thursday 2025-12-04) returns a slot
-        mock_driver.find_elements.side_effect = [
-            [],  # Friday - no slots
-            [mock_slot],  # Thursday - has slot
-        ]
+        # Wednesday 2025-12-03 has slots
+        mock_driver.find_elements.return_value = [mock_slot]
 
-        # Mock navigation methods
         booker.go_to_date = Mock()
         booker.wait_for_matrix_date = Mock()
 
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-03", "21:00", 2.0
+        )
+
+        assert slot == mock_slot
+        assert end_time == "23:00"
+        assert found_date == "2025-12-03"
+        # Should only navigate to the target date
+        assert booker.go_to_date.call_count == 1
+
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_skips_friday_as_target_date(
+        self, mock_logging, mock_setup_driver, mock_strategy_class
+    ):
+        """Test that Friday target date is skipped and forward search begins."""
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock slot on Monday
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # Friday is skipped, Monday (forward) has slot
+        # First call: Monday 2025-12-08 (forward from Friday)
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Friday 2025-12-05
         slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
             "2025-12-05", "21:00", 2.0
         )
 
         assert slot == mock_slot
         assert end_time == "23:00"
-        assert found_date == "2025-12-04"
-        # Should have navigated to Thursday after Friday failed
-        assert booker.go_to_date.call_count == 2
+        assert found_date == "2025-12-08"
+        # Should skip Friday and go to Monday
+        assert booker.go_to_date.call_count == 1
 
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    def test_skips_weekend_when_searching_backwards(
+    def test_searches_forward_then_backward(
         self, mock_logging, mock_setup_driver, mock_strategy_class
     ):
-        """Test that backwards search skips Saturday and Sunday."""
+        """Test that forward search happens first, then backward."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         booker = PadelBooker()
 
-        # Mock slot on Friday
+        # Mock slot on previous Monday
         mock_slot = Mock()
         mock_period = Mock()
         mock_period.text = "21:00 - 23:00"
         mock_slot.find_element.return_value = mock_period
         mock_slot.get_attribute.return_value = "Court 1"
 
-        # Monday (no slots) -> skip Sat/Sun -> Friday (has slot)
+        # Wednesday target: no slots
+        # Thursday forward: no slots
+        # Skip Friday/Sat/Sun
+        # Next Monday forward: no slots
+        # Tuesday backward: has slot
         mock_driver.find_elements.side_effect = [
-            [],  # Monday 2025-12-08 - no slots
-            [mock_slot],  # Friday 2025-12-05 - has slot
+            [],  # Wednesday 2025-12-03 target - no slots
+            [],  # Thursday 2025-12-04 forward - no slots
+            [],  # Monday 2025-12-08 forward (after skipping Fri/Sat/Sun) - no slots
+            [mock_slot],  # Tuesday 2025-12-02 backward - has slot
         ]
 
         booker.go_to_date = Mock()
         booker.wait_for_matrix_date = Mock()
 
         slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
-            "2025-12-08", "21:00", 2.0
+            "2025-12-03", "21:00", 2.0, max_days_back=2
         )
 
         assert slot == mock_slot
         assert end_time == "23:00"
-        assert found_date == "2025-12-05"
-        # Should have navigated to Monday and then Friday (skipping weekend)
-        assert booker.go_to_date.call_count == 2
+        assert found_date == "2025-12-02"
 
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
-    def test_returns_none_when_no_slots_found_after_searching_backwards(
+    def test_skips_weekend_and_friday_when_searching(
         self, mock_logging, mock_setup_driver, mock_strategy_class
     ):
-        """Test returns None when no slots found after searching backwards."""
+        """Test that search skips Friday, Saturday and Sunday."""
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock slot on next week's Monday
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # Thursday target: no slots
+        # Skip Fri/Sat/Sun, Monday forward: has slot
+        mock_driver.find_elements.side_effect = [
+            [],  # Thursday 2025-12-04 target - no slots
+            [mock_slot],  # Monday 2025-12-08 forward (after skipping Fri/Sat/Sun) - has slot
+        ]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-04", "21:00", 2.0
+        )
+
+        assert slot == mock_slot
+        assert end_time == "23:00"
+        assert found_date == "2025-12-08"
+
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_returns_none_when_no_slots_found_in_search_window(
+        self, mock_logging, mock_setup_driver, mock_strategy_class
+    ):
+        """Test returns None when no slots found in search window."""
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
@@ -372,7 +447,7 @@ class TestPadelBookerBackwardsDaySearch:
         booker.wait_for_matrix_date = Mock()
 
         slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
-            "2025-12-05", "21:00", 2.0, max_days_back=3
+            "2025-12-03", "21:00", 2.0, max_days_back=3
         )
 
         assert slot is None
