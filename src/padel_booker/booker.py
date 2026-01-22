@@ -263,6 +263,7 @@ class PadelBooker:
         Searches for available slots on the target date first (if it's a valid weekday).
         If no slots are found, searches backwards only.
         Only searches on Monday-Thursday (avoiding Friday and weekends).
+        Stops searching when the current runtime date (today) is reached.
 
         Args:
             target_date: Initial date to search (YYYY-MM-DD)
@@ -274,6 +275,7 @@ class PadelBooker:
             Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
         """
         target_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+        today = datetime.now().date()
         
         # Try the target date first if it's Monday-Thursday
         if target_dt.weekday() < 4:
@@ -293,6 +295,11 @@ class PadelBooker:
         days_searched = 0
         
         while days_searched < max_days_back:
+            # Stop if we've gone before today's date (into the past)
+            if current_date < today:
+                self.logger.info("Stopped backward search at current runtime date %s", today)
+                break
+            
             # Only search on Monday-Thursday (weekday 0-3)
             if current_date.weekday() < 4:
                 date_str = current_date.strftime("%Y-%m-%d")

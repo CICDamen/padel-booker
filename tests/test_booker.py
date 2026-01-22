@@ -308,18 +308,27 @@ class TestPadelBookerFallbackSearch:
         # Should only navigate to the target date
         assert booker.go_to_date.call_count == 1
 
+    @patch("padel_booker.booker.datetime")
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
     def test_skips_friday_as_target_date(
-        self, mock_logging, mock_setup_driver, mock_strategy_class
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
     ):
         """Test that Friday target date is skipped and backward search begins."""
+        from datetime import datetime as real_datetime
+        
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         booker = PadelBooker()
+
+        # Mock today as 2025-12-01 (before test dates)
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        # Keep strptime working normally
+        mock_datetime_class.strptime = real_datetime.strptime
 
         # Mock slot on Thursday (backward from Friday)
         mock_slot = Mock()
@@ -346,18 +355,27 @@ class TestPadelBookerFallbackSearch:
         # Should skip Friday and go to Thursday (backward)
         assert booker.go_to_date.call_count == 1
 
+    @patch("padel_booker.booker.datetime")
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
     def test_searches_backward_only(
-        self, mock_logging, mock_setup_driver, mock_strategy_class
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
     ):
         """Test that backward search happens when target has no slots."""
+        from datetime import datetime as real_datetime
+        
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         booker = PadelBooker()
+
+        # Mock today as 2025-12-01 (before test dates)
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        # Keep strptime working normally
+        mock_datetime_class.strptime = real_datetime.strptime
 
         # Mock slot on previous Tuesday
         mock_slot = Mock()
@@ -384,18 +402,27 @@ class TestPadelBookerFallbackSearch:
         assert end_time == "23:00"
         assert found_date == "2025-12-02"
 
+    @patch("padel_booker.booker.datetime")
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
     def test_skips_weekend_and_friday_when_searching(
-        self, mock_logging, mock_setup_driver, mock_strategy_class
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
     ):
         """Test that search skips Friday, Saturday and Sunday when searching backward."""
+        from datetime import datetime as real_datetime
+        
         mock_driver = Mock()
         mock_wait = Mock()
         mock_setup_driver.return_value = (mock_driver, mock_wait)
 
         booker = PadelBooker()
+
+        # Mock today as 2025-11-30 (before test dates)
+        mock_today = real_datetime(2025, 11, 30).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        # Keep strptime working normally
+        mock_datetime_class.strptime = real_datetime.strptime
 
         # Mock slot on previous Monday
         mock_slot = Mock()
@@ -450,3 +477,47 @@ class TestPadelBookerFallbackSearch:
         assert slot is None
         assert end_time is None
         assert found_date is None
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_stops_backward_search_at_runtime_date(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that backward search stops when reaching the current runtime date."""
+        from datetime import datetime as real_datetime
+        
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock today as 2025-12-01 (Monday)
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        # Keep strptime working normally
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        # No slots on any day
+        mock_driver.find_elements.return_value = []
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Target date is Wednesday 2025-12-03 (2 days after today)
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-03", "21:00", 2.0, max_days_back=10
+        )
+
+        # Should search Wednesday 2025-12-03 (target), Tuesday 2025-12-02 (backward), 
+        # and Monday 2025-12-01 (today - backward), but NOT go before today
+        assert booker.go_to_date.call_count == 3  # Wednesday, Tuesday, and Monday (today)
+        assert slot is None
+        assert end_time is None
+        assert found_date is None
+        
+        # Verify the dates that were searched
+        calls = [call[0][0] for call in booker.go_to_date.call_args_list]
+        assert calls == ["2025-12-03", "2025-12-02", "2025-12-01"]
