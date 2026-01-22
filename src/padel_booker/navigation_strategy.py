@@ -110,8 +110,12 @@ class DesktopNavigationStrategy(NavigationStrategy):
             # Now click on the specific date
             date_id = f"cal_{year}_{month}_{day}"
             try:
-                date_cell = driver.find_element(By.ID, date_id)
-                date_link = date_cell.find_element(By.CLASS_NAME, "cal-link")
+                # Wait for the date cell to be present after month navigation
+                wait.until(EC.presence_of_element_located((By.ID, date_id)))
+                # Wait for the date link within the cell to be present and clickable
+                date_link = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, f"#{date_id} .cal-link"))
+                )
                 date_link.click()
                 logger.info("Successfully navigated to %s", target_date)
 
