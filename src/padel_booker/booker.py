@@ -268,7 +268,9 @@ class PadelBooker:
             target_date: Initial date to search (YYYY-MM-DD)
             start_time: Start time for the slot (HH:MM)
             duration_hours: Duration in hours
-            max_days_back: Maximum number of days to search in either direction (default: 28)
+            max_days_back: Maximum number of weekdays to search in each direction (default: 28).
+                          Note: This parameter name is kept for backward compatibility but applies
+                          to both forward and backward searches.
 
         Returns:
             Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
@@ -284,9 +286,11 @@ class PadelBooker:
             if slot:
                 self.logger.info("Found slot on target date %s", target_date)
                 return slot, end_time, target_date
+            self.logger.info("No slot found on target date, searching forward...")
+        else:
+            self.logger.info("Target date %s is Friday/weekend, skipping to forward search", target_date)
         
         # Search forward first
-        self.logger.info("No slot found on target date, searching forward...")
         current_date = target_dt + timedelta(days=1)
         days_searched = 0
         
