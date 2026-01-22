@@ -13,7 +13,7 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **RESTful API** for automated court booking
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
-- **Smart slot fallback**: Automatically searches forward first, then backwards through weekdays (Monday-Thursday only, avoiding Friday and weekends) if preferred date unavailable
+- **Smart slot fallback**: Automatically searches forward first, then backwards through weekdays (Monday-Thursday only, avoiding Friday and weekends) up to the current date if preferred date unavailable
 - Smart player selection with rotation and error handling
 - **Flexible booking parameters** passed directly via API
 - Headless browser automation (no UI required)
@@ -143,7 +143,7 @@ Content-Type: application/json
 
 **Parameters:**
 - `login_url`: URL to the booking website
-- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches forward first, then backwards through weekdays Monday-Thursday only if unavailable)
+- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches forward first, then backwards through weekdays Monday-Thursday only up to the current date if unavailable)
 - `start_time`: Start time in HH:MM format
 - `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
 - `booker_first_name`: First name of the person making the booking

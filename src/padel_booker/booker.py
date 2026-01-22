@@ -295,9 +295,9 @@ class PadelBooker:
         days_searched = 0
         
         while days_searched < max_days_back:
-            # Stop if we've reached today's date
+            # Stop if we've gone before today's date (into the past)
             if current_date < today:
-                self.logger.info("Reached current runtime date %s, stopping backward search", today)
+                self.logger.info("Stopped backward search at current runtime date %s", today)
                 break
             
             # Only search on Monday-Thursday (weekday 0-3)
