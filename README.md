@@ -13,7 +13,7 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **RESTful API** for automated court booking
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
-- **Smart slot fallback**: Automatically searches backwards through workdays if preferred date unavailable
+- **Smart slot fallback**: Automatically searches forward first, then backwards through weekdays (Monday-Thursday only, avoiding Friday and weekends) if preferred date unavailable
 - Smart player selection with rotation and error handling
 - **Flexible booking parameters** passed directly via API
 - Headless browser automation (no UI required)
@@ -143,7 +143,7 @@ Content-Type: application/json
 
 **Parameters:**
 - `login_url`: URL to the booking website
-- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches backwards through workdays if unavailable)
+- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches forward first, then backwards through weekdays Monday-Thursday only if unavailable)
 - `start_time`: Start time in HH:MM format
 - `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
 - `booker_first_name`: First name of the person making the booking
@@ -287,7 +287,7 @@ Integration tests require:
 
 **What they test:**
 - `test_full_booking_flow_without_confirmation`: Tests the complete booking flow (login → navigate → find slot → select players → reach confirmation) **without** clicking the final "Bevestigen" button, so no actual booking is made
-- `test_booking_flow_with_fallback_dates`: Tests the backwards day search functionality with real website interaction
+- `test_booking_flow_with_fallback_dates`: Tests the forward/backward day search functionality (avoiding Friday and weekends) with real website interaction
 
 **Note**: Integration tests will be skipped if credentials are not provided.
 
