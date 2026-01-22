@@ -261,16 +261,14 @@ class PadelBooker:
         """Finds consecutive slots with fallback, avoiding Friday and weekends.
 
         Searches for available slots on the target date first (if it's a valid weekday).
-        If no slots are found, searches forward first, then backwards.
+        If no slots are found, searches backwards only.
         Only searches on Monday-Thursday (avoiding Friday and weekends).
 
         Args:
             target_date: Initial date to search (YYYY-MM-DD)
             start_time: Start time for the slot (HH:MM)
             duration_hours: Duration in hours
-            max_days_back: Maximum number of weekdays to search in each direction (default: 28).
-                          Note: This parameter name is kept for backward compatibility but applies
-                          to both forward and backward searches.
+            max_days_back: Maximum number of weekdays to search backward (default: 28).
 
         Returns:
             Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
@@ -286,34 +284,11 @@ class PadelBooker:
             if slot:
                 self.logger.info("Found slot on target date %s", target_date)
                 return slot, end_time, target_date
-            self.logger.info("No slot found on target date, searching forward...")
+            self.logger.info("No slot found on target date, searching backward...")
         else:
-            self.logger.info("Target date %s is Friday/weekend, skipping to forward search", target_date)
+            self.logger.info("Target date %s is Friday/weekend, skipping to backward search", target_date)
         
-        # Search forward first
-        current_date = target_dt + timedelta(days=1)
-        days_searched = 0
-        
-        while days_searched < max_days_back:
-            # Only search on Monday-Thursday (weekday 0-3)
-            if current_date.weekday() < 4:
-                date_str = current_date.strftime("%Y-%m-%d")
-                self.logger.info("Searching for slots on %s (forward)", date_str)
-                
-                self.go_to_date(date_str)
-                self.wait_for_matrix_date(date_str)
-                slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
-                
-                if slot:
-                    self.logger.info("Found slot on %s (forward search)", date_str)
-                    return slot, end_time, date_str
-                
-                days_searched += 1
-            
-            current_date += timedelta(days=1)
-        
-        # If no slots found forward, search backward
-        self.logger.info("No slot found forward, searching backward...")
+        # Search backward only
         current_date = target_dt - timedelta(days=1)
         days_searched = 0
         
@@ -335,7 +310,7 @@ class PadelBooker:
             
             current_date -= timedelta(days=1)
         
-        self.logger.info("No slots found after searching %d weekdays in each direction", days_searched)
+        self.logger.info("No slots found after searching %d weekdays backward", days_searched)
         return None, None, None
 
     def try_booking_with_player_rotation(

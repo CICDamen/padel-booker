@@ -101,19 +101,30 @@ class TestDesktopNavigationStrategy:
         mock_calendar_title = Mock()
         mock_calendar_title.text = "Nov 2025"
 
-        # Mock date cell and link
-        mock_date_cell = Mock()
+        # Mock date link that will be returned by wait.until
         mock_date_link = Mock()
-        mock_date_cell.find_element.return_value = mock_date_link
 
         def mock_find_element(by, value):
             if value == "calendar_date_title":
                 return mock_calendar_title
-            elif value.startswith("cal_"):
-                return mock_date_cell
             return Mock()
 
         mock_driver.find_element.side_effect = mock_find_element
+
+        # Track how many times wait.until is called to return different things
+        wait_call_count = [0]
+
+        def mock_until(condition):
+            wait_call_count[0] += 1
+            # First call: wait for calendar_date_title presence (line 68)
+            # Second call: wait for date cell presence (line 114)
+            # Third call: wait for date link to be clickable (line 116-118) - return mock_date_link
+            if wait_call_count[0] == 3:
+                return mock_date_link
+            # Fourth call: wait for matrix-container (line 124)
+            return Mock()
+
+        mock_wait.until.side_effect = mock_until
 
         # Call navigate_to_date for a date in Nov 2025
         strategy.navigate_to_date(mock_driver, mock_wait, mock_logger, "2025-11-15")
