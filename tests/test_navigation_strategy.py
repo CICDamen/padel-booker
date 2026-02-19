@@ -7,7 +7,8 @@ from padel_booker.navigation_strategy import (
     NavigationStrategy,
     DesktopNavigationStrategy,
     MobileNavigationStrategy,
-    get_navigation_strategy
+    get_navigation_strategy,
+    parse_month_abbreviation,
 )
 
 
@@ -173,3 +174,87 @@ class TestNavigationStrategyInterface:
         assert isinstance(strategy, NavigationStrategy)
         assert hasattr(strategy, 'navigate_to_date')
         assert hasattr(strategy, 'wait_for_matrix_date')
+
+
+@pytest.mark.unit
+class TestParseMonthAbbreviation:
+    """Test the parse_month_abbreviation helper function."""
+
+    def test_english_abbreviations(self):
+        """Test standard English month abbreviations."""
+        assert parse_month_abbreviation("Jan") == 1
+        assert parse_month_abbreviation("Feb") == 2
+        assert parse_month_abbreviation("Mar") == 3
+        assert parse_month_abbreviation("Apr") == 4
+        assert parse_month_abbreviation("May") == 5
+        assert parse_month_abbreviation("Jun") == 6
+        assert parse_month_abbreviation("Jul") == 7
+        assert parse_month_abbreviation("Aug") == 8
+        assert parse_month_abbreviation("Sep") == 9
+        assert parse_month_abbreviation("Oct") == 10
+        assert parse_month_abbreviation("Nov") == 11
+        assert parse_month_abbreviation("Dec") == 12
+
+    def test_dutch_abbreviations(self):
+        """Test Dutch month abbreviations."""
+        assert parse_month_abbreviation("Maa") == 3   # Maart
+        assert parse_month_abbreviation("Mrt") == 3   # Maart (alternative)
+        assert parse_month_abbreviation("Mei") == 5   # Mei
+        assert parse_month_abbreviation("Okt") == 10  # Oktober
+
+    def test_uppercase_abbreviations(self):
+        """Test that uppercase abbreviations are handled (e.g., 'MAA 2026')."""
+        assert parse_month_abbreviation("MAA") == 3
+        assert parse_month_abbreviation("JAN") == 1
+        assert parse_month_abbreviation("OKT") == 10
+        assert parse_month_abbreviation("MEI") == 5
+
+    def test_lowercase_abbreviations(self):
+        """Test that lowercase abbreviations are handled."""
+        assert parse_month_abbreviation("jan") == 1
+        assert parse_month_abbreviation("maa") == 3
+        assert parse_month_abbreviation("dec") == 12
+
+    def test_invalid_abbreviation_raises_value_error(self):
+        """Test that an unrecognized abbreviation raises ValueError."""
+        with pytest.raises(ValueError, match="is not in list"):
+            parse_month_abbreviation("Xyz")
+
+    def test_navigate_to_date_with_dutch_month(self):
+        """Test that desktop navigation handles Dutch month abbreviations like 'MAA 2026'."""
+        strategy = DesktopNavigationStrategy()
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_logger = Mock()
+
+        # Mock calendar title showing MAA 2026 (Dutch for March 2026)
+        mock_calendar_title = Mock()
+        mock_calendar_title.text = "MAA 2026"
+
+        mock_date_link = Mock()
+
+        def mock_find_element(by, value):
+            if value == "calendar_date_title":
+                return mock_calendar_title
+            return Mock()
+
+        mock_driver.find_element.side_effect = mock_find_element
+
+        wait_call_count = [0]
+
+        def mock_until(condition):
+            wait_call_count[0] += 1
+            if wait_call_count[0] == 3:
+                return mock_date_link
+            return Mock()
+
+        mock_wait.until.side_effect = mock_until
+
+        # Navigate to a date in March 2026 - should not log any errors
+        strategy.navigate_to_date(mock_driver, mock_wait, mock_logger, "2026-03-19")
+
+        # Verify no error was logged for month parsing
+        mock_logger.error.assert_not_called()
+        # Verify date link was clicked
+        mock_date_link.click.assert_called_once()
