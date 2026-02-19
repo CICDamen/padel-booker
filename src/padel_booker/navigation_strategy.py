@@ -5,6 +5,44 @@ import datetime as dt
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+# Mapping of lowercase month abbreviations (English and Dutch) to month numbers
+MONTH_ABBREVIATIONS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "mrt": 3,   # Dutch alternative for Maart (March)
+    "maa": 3,   # Dutch abbreviation for Maart (March)
+    "apr": 4,
+    "may": 5,
+    "mei": 5,   # Dutch abbreviation for Mei (May)
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "okt": 10,  # Dutch abbreviation for Oktober (October)
+    "nov": 11,
+    "dec": 12,
+}
+
+
+def parse_month_abbreviation(month_str: str) -> int:
+    """Parse a month abbreviation (English or Dutch) to a month number (1-12).
+
+    Args:
+        month_str: Month abbreviation string (e.g., 'Jan', 'Maa', 'MAA', 'Mrt')
+
+    Returns:
+        Month number (1-12)
+
+    Raises:
+        ValueError: If the abbreviation is not recognized
+    """
+    key = month_str.lower()
+    if key not in MONTH_ABBREVIATIONS:
+        raise ValueError(f"'{month_str}' is not in list")
+    return MONTH_ABBREVIATIONS[key]
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
@@ -74,15 +112,11 @@ class DesktopNavigationStrategy(NavigationStrategy):
                 # Get current month/year from calendar title
                 calendar_title = driver.find_element(By.ID, "calendar_date_title").text.strip()
                 try:
-                    # Parse "Nov 2025" format
-                    month_names = [
-                        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-                    ]
+                    # Parse "Nov 2025" or "MAA 2026" format (English and Dutch abbreviations)
                     parts = calendar_title.split()
                     current_month_str = parts[0]
                     current_year = int(parts[1])
-                    current_month = month_names.index(current_month_str.title()) + 1
+                    current_month = parse_month_abbreviation(current_month_str)
                 except (ValueError, IndexError) as e:
                     logger.error("Failed to parse calendar title '%s': %s", calendar_title, e)
                     break
