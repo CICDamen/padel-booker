@@ -41,7 +41,29 @@ class TestBookingRequest:
             BookingRequest(**data)
 
         errors = exc_info.value.errors()
-        assert len(errors) >= 5  # At least 5 missing required fields
+        assert len(errors) >= 4  # booking_date is optional; at least 4 missing required fields
+
+    def test_default_booking_date_is_30_days_from_now(self):
+        """Test that booking_date defaults to today + 30 days when not provided."""
+        from datetime import datetime, timedelta
+        from unittest.mock import patch
+
+        fixed_now = datetime(2026, 1, 1, 12, 0, 0)
+        expected_date = (fixed_now + timedelta(days=30)).strftime("%Y-%m-%d")
+
+        data = {
+            "login_url": "https://example.com",
+            "start_time": "21:30",
+            "duration_hours": 1.5,
+            "booker_first_name": "John",
+            "player_candidates": ["John Doe"],
+        }
+
+        with patch("padel_booker.models.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed_now
+            request = BookingRequest(**data)
+
+        assert request.booking_date == expected_date
 
     def test_empty_player_candidates(self):
         """Test booking request with empty player candidates list."""
