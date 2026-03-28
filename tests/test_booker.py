@@ -352,8 +352,53 @@ class TestPadelBookerFallbackSearch:
         assert slot == mock_slot
         assert end_time == "23:00"
         assert found_date == "2025-12-04"
-        # Should skip Friday and go to Thursday (backward)
+        # Should navigate directly to Thursday (latest valid date before Friday) first
         assert booker.go_to_date.call_count == 1
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-04"
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_navigates_to_thursday_for_saturday_target(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that Saturday target date navigates directly to Thursday (latest valid date)."""
+        from datetime import datetime as real_datetime
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        # Mock today as 2025-12-01 (before test dates)
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # Saturday 2025-12-06 target: should navigate directly to Thursday 2025-12-04
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-06", "21:00", 2.0
+        )
+
+        assert slot == mock_slot
+        assert end_time == "23:00"
+        assert found_date == "2025-12-04"
+        # Should navigate directly to Thursday (skipping Saturday and Friday)
+        assert booker.go_to_date.call_count == 1
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-04"
 
     @patch("padel_booker.booker.datetime")
     @patch("padel_booker.booker.DesktopNavigationStrategy")

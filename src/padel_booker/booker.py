@@ -260,13 +260,13 @@ class PadelBooker:
     ):
         """Finds consecutive slots with fallback, avoiding Friday and weekends.
 
-        Searches for available slots on the target date first (if it's a valid weekday).
-        If no slots are found, searches backwards only.
+        Navigates to the latest possible valid date (Monday-Thursday) at or before
+        target_date first, then searches backwards if no slot is found.
         Only searches on Monday-Thursday (avoiding Friday and weekends).
         Stops searching when the current runtime date (today) is reached.
 
         Args:
-            target_date: Initial date to search (YYYY-MM-DD)
+            target_date: Latest desired date to search (YYYY-MM-DD)
             start_time: Start time for the slot (HH:MM)
             duration_hours: Duration in hours
             max_days_back: Maximum number of weekdays to search backward (default: 28).
@@ -276,47 +276,50 @@ class PadelBooker:
         """
         target_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
         today = datetime.now().date()
-        
-        # Try the target date first if it's Monday-Thursday
-        if target_dt.weekday() < 4:
-            self.logger.info("Searching for slots on target date %s", target_date)
-            self.go_to_date(target_date)
-            self.wait_for_matrix_date(target_date)
-            slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
-            if slot:
-                self.logger.info("Found slot on target date %s", target_date)
-                return slot, end_time, target_date
-            self.logger.info("No slot found on target date, searching backward...")
-        else:
-            self.logger.info("Target date %s is Friday/weekend, skipping to backward search", target_date)
-        
-        # Search backward only
-        current_date = target_dt - timedelta(days=1)
+
+        # Find the latest valid (Mon-Thu) date at or before target_date
+        latest_valid_dt = target_dt
+        while latest_valid_dt.weekday() >= 4:  # Skip Friday (4), Saturday (5), Sunday (6)
+            latest_valid_dt -= timedelta(days=1)
+
+        latest_valid_str = latest_valid_dt.strftime("%Y-%m-%d")
+        self.logger.info("Navigating to latest possible date first: %s", latest_valid_str)
+        self.go_to_date(latest_valid_str)
+        self.wait_for_matrix_date(latest_valid_str)
+        slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
+        if slot:
+            self.logger.info("Found slot on latest possible date %s", latest_valid_str)
+            return slot, end_time, latest_valid_str
+
+        self.logger.info("No slot found on %s, searching backward...", latest_valid_str)
+
+        # Search backward from latest_valid_dt - 1
+        current_date = latest_valid_dt - timedelta(days=1)
         days_searched = 0
-        
+
         while days_searched < max_days_back:
             # Stop if we've gone before today's date (into the past)
             if current_date < today:
                 self.logger.info("Stopped backward search at current runtime date %s", today)
                 break
-            
+
             # Only search on Monday-Thursday (weekday 0-3)
             if current_date.weekday() < 4:
                 date_str = current_date.strftime("%Y-%m-%d")
                 self.logger.info("Searching for slots on %s (backward)", date_str)
-                
+
                 self.go_to_date(date_str)
                 self.wait_for_matrix_date(date_str)
                 slot, end_time = self.find_consecutive_slots(start_time, duration_hours)
-                
+
                 if slot:
                     self.logger.info("Found slot on %s (backward search)", date_str)
                     return slot, end_time, date_str
-                
+
                 days_searched += 1
-            
+
             current_date -= timedelta(days=1)
-        
+
         self.logger.info("No slots found after searching %d weekdays backward", days_searched)
         return None, None, None
 
