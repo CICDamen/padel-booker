@@ -566,3 +566,176 @@ class TestPadelBookerFallbackSearch:
         # Verify the dates that were searched
         calls = [call[0][0] for call in booker.go_to_date.call_args_list]
         assert calls == ["2025-12-03", "2025-12-02", "2025-12-01"]
+
+
+@pytest.mark.unit
+class TestPadelBookerFallbackSearchNewOptions:
+    """Test fallback search with skip_dates, skip_weekends, and conditional_skip_rules."""
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_skips_specific_date_in_skip_dates(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that a date listed in skip_dates is skipped and search moves to previous day."""
+        from datetime import datetime as real_datetime
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Wednesday 2025-12-03 is in skip_dates, so should navigate to Tuesday 2025-12-02
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-03", "21:00", 2.0, skip_dates=["2025-12-03"]
+        )
+
+        assert slot == mock_slot
+        assert found_date == "2025-12-02"
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-02"
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_skip_weekends_false_allows_friday(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that skip_weekends=False allows booking on Friday."""
+        from datetime import datetime as real_datetime
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Friday 2025-12-05 with skip_weekends=False: should use Friday directly
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-05", "21:00", 2.0, skip_weekends=False
+        )
+
+        assert slot == mock_slot
+        assert found_date == "2025-12-05"
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-05"
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_conditional_skip_rule_skips_thursday_before_date(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that a conditional rule skips Thursday before a cutoff date."""
+        from datetime import datetime as real_datetime
+        from types import SimpleNamespace
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        # Thursday is skipped by rule; Wednesday is the first date navigated to and has slots
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Rule: skip Thursday (weekday=3) before 2026-01-01
+        rule = SimpleNamespace(weekday=3, before_date="2026-01-01", after_date=None)
+
+        # Target is Thursday 2025-12-04, but rule skips it -> latest valid is Wed 2025-12-03
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-04", "21:00", 2.0, conditional_skip_rules=[rule]
+        )
+
+        assert slot == mock_slot
+        assert found_date == "2025-12-03"
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-03"
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
+    def test_conditional_skip_rule_allows_thursday_after_cutoff(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that Thursday after the before_date cutoff is allowed."""
+        from datetime import datetime as real_datetime
+        from types import SimpleNamespace
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        mock_today = real_datetime(2026, 1, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Rule: skip Thursday before 2026-01-01; target is Thursday 2026-01-01 (at cutoff, not before)
+        rule = SimpleNamespace(weekday=3, before_date="2026-01-01", after_date=None)
+
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2026-01-01", "21:00", 2.0, conditional_skip_rules=[rule]
+        )
+
+        assert slot == mock_slot
+        assert found_date == "2026-01-01"
+        assert booker.go_to_date.call_args_list[0][0][0] == "2026-01-01"

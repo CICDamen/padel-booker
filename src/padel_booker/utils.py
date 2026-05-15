@@ -103,6 +103,9 @@ def run_booking_background(
     booker_first_name: str,
     player_candidates: list[str],
     booking_status: Dict,
+    skip_weekends: bool = True,
+    skip_dates: list[str] | None = None,
+    conditional_skip_rules: list | None = None,
 ):
     """Run booking in background thread.
 
@@ -116,6 +119,9 @@ def run_booking_background(
         booker_first_name: First name of the person making the booking
         player_candidates: List of player names to try
         booking_status: Shared dict to track booking status
+        skip_weekends: If True (default), skip Friday, Saturday and Sunday.
+        skip_dates: Optional list of specific dates (YYYY-MM-DD) to always skip.
+        conditional_skip_rules: Optional list of rules to skip a weekday within a date range.
     """
     from .booker import PadelBooker
 
@@ -142,7 +148,12 @@ def run_booking_background(
 
             # Find consecutive slots with fallback to previous workdays
             slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
-                booking_date, start_time, duration_hours
+                booking_date,
+                start_time,
+                duration_hours,
+                skip_weekends=skip_weekends,
+                skip_dates=skip_dates,
+                conditional_skip_rules=conditional_skip_rules,
             )
 
             if not slot:

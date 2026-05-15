@@ -40,17 +40,20 @@ async def book_court(
     # Start booking in background thread with all parameters from the request
     thread = threading.Thread(
         target=run_booking_background,
-        args=(
-            booker_username,
-            booker_password,
-            request.login_url,
-            request.booking_date,
-            request.start_time,
-            request.duration_hours,
-            request.booker_first_name,
-            request.player_candidates,
-            booking_status,
-        ),
+        kwargs={
+            "username": booker_username,
+            "password": booker_password,
+            "login_url": request.login_url,
+            "booking_date": request.booking_date,
+            "start_time": request.start_time,
+            "duration_hours": request.duration_hours,
+            "booker_first_name": request.booker_first_name,
+            "player_candidates": request.player_candidates,
+            "booking_status": booking_status,
+            "skip_weekends": request.skip_weekends,
+            "skip_dates": request.skip_dates,
+            "conditional_skip_rules": request.conditional_skip_rules or None,
+        },
     )
     thread.start()
 

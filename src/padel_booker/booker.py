@@ -256,30 +256,56 @@ class PadelBooker:
         return None, None
 
     def find_consecutive_slots_with_fallback(
-        self, target_date: str, start_time: str, duration_hours: float, max_days_back: int = 28
+        self,
+        target_date: str,
+        start_time: str,
+        duration_hours: float,
+        max_days_back: int = 28,
+        skip_weekends: bool = True,
+        skip_dates: Optional[list[str]] = None,
+        conditional_skip_rules: Optional[list] = None,
     ):
-        """Finds consecutive slots with fallback, avoiding Friday and weekends.
+        """Finds consecutive slots with fallback.
 
-        Navigates to the latest possible valid date (Monday-Thursday) at or before
-        target_date first, then searches backwards if no slot is found.
-        Only searches on Monday-Thursday (avoiding Friday and weekends).
-        Stops searching when the current runtime date (today) is reached.
+        Navigates to the latest possible valid date at or before target_date first,
+        then searches backwards if no slot is found. Stops searching when the current
+        runtime date (today) is reached.
 
         Args:
             target_date: Latest desired date to search (YYYY-MM-DD)
             start_time: Start time for the slot (HH:MM)
             duration_hours: Duration in hours
-            max_days_back: Maximum number of weekdays to search backward (default: 28).
+            max_days_back: Maximum number of valid days to search backward (default: 28).
+            skip_weekends: If True (default), skip Friday, Saturday and Sunday.
+            skip_dates: Optional list of specific dates (YYYY-MM-DD) to always skip.
+            conditional_skip_rules: Optional list of rules with weekday, before_date, after_date
+                fields. Each rule skips dates matching that weekday within the given date range.
 
         Returns:
             Tuple of (slot_element, end_time, found_date) or (None, None, None) if no slots found
         """
         target_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
         today = datetime.now().date()
+        skip_dates_set = set(skip_dates) if skip_dates else set()
+        rules = conditional_skip_rules or []
 
-        # Find the latest valid (Mon-Thu) date at or before target_date
+        def is_skipped(dt):
+            if skip_weekends and dt.weekday() >= 4:  # Friday=4, Saturday=5, Sunday=6
+                return True
+            dt_str = dt.strftime("%Y-%m-%d")
+            if dt_str in skip_dates_set:
+                return True
+            for rule in rules:
+                if dt.weekday() == rule.weekday:
+                    if rule.before_date and dt_str < rule.before_date:
+                        return True
+                    if rule.after_date and dt_str >= rule.after_date:
+                        return True
+            return False
+
+        # Find the latest valid date at or before target_date
         latest_valid_dt = target_dt
-        while latest_valid_dt.weekday() >= 4:  # Skip Friday (4), Saturday (5), Sunday (6)
+        while is_skipped(latest_valid_dt):
             latest_valid_dt -= timedelta(days=1)
 
         latest_valid_str = latest_valid_dt.strftime("%Y-%m-%d")
@@ -303,8 +329,7 @@ class PadelBooker:
                 self.logger.info("Stopped backward search at current runtime date %s", today)
                 break
 
-            # Only search on Monday-Thursday (weekday 0-3)
-            if current_date.weekday() < 4:
+            if not is_skipped(current_date):
                 date_str = current_date.strftime("%Y-%m-%d")
                 self.logger.info("Searching for slots on %s (backward)", date_str)
 
@@ -320,7 +345,7 @@ class PadelBooker:
 
             current_date -= timedelta(days=1)
 
-        self.logger.info("No slots found after searching %d weekdays backward", days_searched)
+        self.logger.info("No slots found after searching %d days backward", days_searched)
         return None, None, None
 
     def try_booking_with_player_rotation(
