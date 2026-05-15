@@ -13,9 +13,10 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **RESTful API** for automated court booking
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
-- **Smart slot fallback**: Automatically searches forward first, then backwards through weekdays (Monday-Thursday only, avoiding Friday and weekends) up to the current date if preferred date unavailable
+- **Smart slot fallback**: searches the target date first, then backwards through valid days up to today
+- **Flexible skip rules**: skip weekends/Fridays, specific dates, whole weekdays, or a weekday only before/after a cutoff date
 - Smart player selection with rotation and error handling
-- **Flexible booking parameters** passed directly via API
+- **Booking policy via config**: stable settings (URL, time, skip rules) live in a config file or env vars; the booking request only carries what changes each time
 - Headless browser automation (no UI required)
 - **Docker support** for easy deployment
 - Comprehensive logging and error reporting
@@ -32,6 +33,8 @@ padel-booker/
 │   ├── booker.py           # Main booking automation logic
 │   ├── utils.py            # Utilities (driver, logging, auth, background tasks)
 │   └── exceptions.py       # Custom exceptions
+├── data/
+│   └── config.example.json # Booking policy config template (copy to config.json)
 ├── Dockerfile              # Container configuration
 ├── pyproject.toml          # Project metadata & dependencies
 └── README.md               # This file
@@ -60,11 +63,13 @@ padel-booker/
      -p 8080:8080 \
      -e API_USERNAME=your_api_user \
      -e API_PASSWORD=your_api_password \
-     -e BOOKER_PASSWORD=your_booking_password \
      -e BOOKER_USERNAME=your_booking_username \
-     -e ENABLE_BOOKING=true \  # Set to true to enable actual bookings
-     -e MAX_BOOKING_ATTEMPTS=number_of_attempts \ # Optional: max attempts for booking - if players are not available
-     -t padel-booker
+     -e BOOKER_PASSWORD=your_booking_password \
+     -e BOOKING_LOGIN_URL=https://houten.baanreserveren.nl/ \
+     -e BOOKING_START_TIME=21:30 \
+     -e BOOKING_DURATION_HOURS=1.5 \
+     -e ENABLE_BOOKING=true \
+     padel-booker
    ```
 
 ### 🐍 Local Development
@@ -84,23 +89,82 @@ padel-booker/
 
 ## 🛠️ Configuration
 
-### Environment Variables
+Settings are split into two groups: **infrastructure** (always env vars) and **booking policy** (env vars or a JSON config file).
 
-**Required:**
-- `API_USERNAME`: Username for API authentication  
-- `API_PASSWORD`: Password for API authentication
-- `BOOKER_USERNAME`: Username for the booking platform
-- `BOOKER_PASSWORD`: Password for the booking platform
+### Infrastructure env vars
 
-**Optional:**
-- `ENABLE_BOOKING`: Set to `true` to enable actual booking confirmation. When not set or set to any other value, the system runs in dry-run mode (simulates booking without final confirmation)
-- `MAX_BOOKING_ATTEMPTS`: Maximum number of attempts for booking if players are not available
+| Variable | Required | Description |
+|---|---|---|
+| `API_USERNAME` | ✅ | Username for API authentication |
+| `API_PASSWORD` | ✅ | Password for API authentication |
+| `BOOKER_USERNAME` | ✅ | Username for the booking platform |
+| `BOOKER_PASSWORD` | ✅ | Password for the booking platform |
+| `CHROMEDRIVER_PATH` | ✅ | Path to ChromeDriver binary |
+| `ENABLE_BOOKING` | — | Set to `true` to confirm bookings. Omit for dry-run mode |
+| `MAX_BOOKING_ATTEMPTS` | — | Max retries when a player is blocked (default: `2`) |
+| `CHROME_OPTIONS` | — | Space-separated Chrome flags (overrides built-in headless defaults) |
 
-**Example:**
+### Booking policy
+
+These control which days are valid and what time/URL to use. They can be set as **environment variables** (useful for Docker) or in **`data/config.json`** (useful for local runs). Environment variables take precedence over the file.
+
+Copy `data/config.example.json` to `data/config.json` to use the file approach:
+
+```json
+{
+  "login_url": "https://houten.baanreserveren.nl/",
+  "start_time": "21:30",
+  "duration_hours": 1.5,
+  "skip_weekends": true,
+  "skip_dates": [],
+  "conditional_skip_rules": []
+}
+```
+
+| Env var | Config key | Required | Default | Description |
+|---|---|---|---|---|
+| `BOOKING_LOGIN_URL` | `login_url` | ✅ | — | Booking platform URL |
+| `BOOKING_START_TIME` | `start_time` | ✅ | — | Desired start time, e.g. `21:30` |
+| `BOOKING_DURATION_HOURS` | `duration_hours` | ✅ | — | Duration in hours, e.g. `1.5` |
+| `BOOKING_SKIP_WEEKENDS` | `skip_weekends` | — | `true` | Skip Friday, Saturday and Sunday |
+| `BOOKING_SKIP_DATES` | `skip_dates` | — | `[]` | Specific dates to always skip (JSON array of `YYYY-MM-DD` strings) |
+| `BOOKING_CONDITIONAL_SKIP_RULES` | `conditional_skip_rules` | — | `[]` | Weekday skip rules (see below) |
+
+#### Skip rules
+
+`conditional_skip_rules` skips a specific weekday, optionally within a date range. Weekdays: `0` = Monday … `6` = Sunday.
+
+| Rule | Meaning |
+|---|---|
+| `{"weekday": 3}` | Always skip Thursday |
+| `{"weekday": 3, "before_date": "2026-01-01"}` | Skip Thursday only before 2026-01-01 |
+| `{"weekday": 3, "after_date": "2026-06-01"}` | Skip Thursday on and after 2026-06-01 |
+| `{"weekday": 3, "before_date": "2026-01-01", "after_date": "2025-06-01"}` | Skip Thursday within a window |
+
+**Example — skip Thursdays until a league season ends:**
+
 ```bash
-export API_USERNAME="admin"
-export API_PASSWORD="secure_password"
-export ENABLE_BOOKING="true"  # Enable actual bookings (omit for dry-run mode)
+# As env var
+BOOKING_CONDITIONAL_SKIP_RULES='[{"weekday": 3, "before_date": "2026-01-01"}]'
+```
+
+```json
+// In config.json
+{
+  "conditional_skip_rules": [
+    {"weekday": 3, "before_date": "2026-01-01"}
+  ]
+}
+```
+
+**Skip specific holiday dates:**
+```bash
+BOOKING_SKIP_DATES='["2025-12-25", "2026-01-01"]'
+```
+
+**Allow Friday bookings:**
+```bash
+BOOKING_SKIP_WEEKENDS=false
 ```
 
 ---
@@ -132,22 +196,18 @@ Authorization: Basic base64(username:password)
 Content-Type: application/json
 
 {
-  "login_url": "https://houten.baanreserveren.nl/",
   "booking_date": "2025-07-28",
-  "start_time": "21:30",
-  "duration_hours": 1.5,
   "booker_first_name": "John",
   "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
 }
 ```
 
 **Parameters:**
-- `login_url`: URL to the booking website
-- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches forward first, then backwards through weekdays Monday-Thursday only up to the current date if unavailable)
-- `start_time`: Start time in HH:MM format
-- `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
-- `booker_first_name`: First name of the person making the booking
+- `booking_date`: Latest desired date in `YYYY-MM-DD` format. The system tries this date first, then searches backwards through valid days to today if no slot is found. Defaults to today + 30 days.
+- `booker_first_name`: First name of the person making the booking (used to detect if the booker themselves is blocked)
 - `player_candidates`: Array of player names to try for the booking
+
+> The booking URL, start time, duration, and skip rules come from the [booking policy config](#booking-policy) — not the request body.
 
 **Response:**
 ```json
@@ -209,10 +269,7 @@ curl http://localhost:8080/health
 curl -u admin:password \
   -H "Content-Type: application/json" \
   -d '{
-    "login_url": "https://houten.baanreserveren.nl/",
     "booking_date": "2025-07-28",
-    "start_time": "21:30",
-    "duration_hours": 1.5,
     "booker_first_name": "John",
     "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"]
   }' \
@@ -230,8 +287,8 @@ The project uses pytest with comprehensive test coverage across all modules.
 
 ### Test Summary
 
-**61 tests total:**
-- **59 unit tests** (fast, no browser, mocked) - ~2.3s
+**81 tests total:**
+- **79 unit tests** (fast, no browser, mocked) - ~4s
 - **2 integration tests** (requires browser and credentials) - ~varies
 
 ### Running Tests
@@ -269,12 +326,12 @@ uv run pytest tests/test_utils.py
 tests/
 ├── __init__.py
 ├── conftest.py                           # Pytest fixtures and configuration
-├── test_api.py                           # FastAPI endpoint tests (9 tests)
-├── test_booker.py                        # PadelBooker class tests (14 tests)
+├── test_api.py                           # FastAPI endpoint tests (12 tests)
+├── test_booker.py                        # PadelBooker class tests (22 tests)
 ├── test_integration_booking_flow.py      # Integration tests (2 tests)
 ├── test_exceptions.py                    # Custom exception tests (6 tests)
-├── test_models.py                        # Pydantic model tests (7 tests)
-├── test_navigation_strategy.py           # Navigation strategy tests (9 tests)
+├── test_models.py                        # Pydantic model tests (11 tests)
+├── test_navigation_strategy.py           # Navigation strategy tests (15 tests)
 └── test_utils.py                         # Utility function tests (13 tests)
 ```
 
@@ -342,6 +399,9 @@ The project uses GitHub Actions for continuous integration and deployment.
 For integration tests to run in CI, configure these GitHub secrets:
 - `BOOKER_USERNAME`: Booking platform username
 - `BOOKER_PASSWORD`: Booking platform password
+- `BOOKING_LOGIN_URL`: Booking platform URL
+- `BOOKING_START_TIME`: Desired court start time
+- `BOOKING_DURATION_HOURS`: Duration in hours
 
 **Note**: Integration tests are automatically skipped if:
 - Credentials are not configured
