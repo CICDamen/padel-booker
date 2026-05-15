@@ -701,6 +701,50 @@ class TestPadelBookerFallbackSearchNewOptions:
     @patch("padel_booker.booker.DesktopNavigationStrategy")
     @patch("padel_booker.booker.setup_driver")
     @patch("padel_booker.booker.setup_logging")
+    def test_conditional_skip_rule_no_date_range_always_skips_weekday(
+        self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
+    ):
+        """Test that a rule with no date conditions skips the weekday unconditionally."""
+        from datetime import datetime as real_datetime
+        from types import SimpleNamespace
+
+        mock_driver = Mock()
+        mock_wait = Mock()
+        mock_setup_driver.return_value = (mock_driver, mock_wait)
+
+        booker = PadelBooker()
+
+        mock_today = real_datetime(2025, 12, 1).date()
+        mock_datetime_class.now.return_value.date.return_value = mock_today
+        mock_datetime_class.strptime = real_datetime.strptime
+
+        mock_slot = Mock()
+        mock_period = Mock()
+        mock_period.text = "21:00 - 23:00"
+        mock_slot.find_element.return_value = mock_period
+        mock_slot.get_attribute.return_value = "Court 1"
+
+        mock_driver.find_elements.return_value = [mock_slot]
+
+        booker.go_to_date = Mock()
+        booker.wait_for_matrix_date = Mock()
+
+        # Rule: always skip Thursday (no date conditions)
+        rule = SimpleNamespace(weekday=3, before_date=None, after_date=None)
+
+        # Target is Thursday 2025-12-04; rule has no date range so Thursday is always skipped
+        slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
+            "2025-12-04", "21:00", 2.0, conditional_skip_rules=[rule]
+        )
+
+        assert slot == mock_slot
+        assert found_date == "2025-12-03"  # Wednesday
+        assert booker.go_to_date.call_args_list[0][0][0] == "2025-12-03"
+
+    @patch("padel_booker.booker.datetime")
+    @patch("padel_booker.booker.DesktopNavigationStrategy")
+    @patch("padel_booker.booker.setup_driver")
+    @patch("padel_booker.booker.setup_logging")
     def test_conditional_skip_rule_allows_thursday_after_cutoff(
         self, mock_logging, mock_setup_driver, mock_strategy_class, mock_datetime_class
     ):

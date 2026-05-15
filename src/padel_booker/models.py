@@ -6,14 +6,20 @@ from typing import List, Optional
 
 
 class ConditionalSkipRule(BaseModel):
-    """Rule to skip a specific weekday within an optional date range.
+    """Rule to skip a specific weekday, optionally limited to a date range.
 
-    Example: skip Thursday (weekday=3) before 2026-01-01:
-        ConditionalSkipRule(weekday=3, before_date="2026-01-01")
+    - No date conditions → always skip this weekday.
+      Example: {"weekday": 3}  # skip Thursday forever
+    - before_date only → skip this weekday only before that date.
+      Example: {"weekday": 3, "before_date": "2026-01-01"}
+    - after_date only → skip this weekday on and after that date.
+    - Both → skip this weekday within that window.
+
+    weekday: 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
     """
-    weekday: int  # 0=Monday, 1=Tuesday, ..., 6=Sunday
-    before_date: Optional[str] = None  # Skip this weekday if date < before_date
-    after_date: Optional[str] = None  # Skip this weekday if date >= after_date
+    weekday: int
+    before_date: Optional[str] = None
+    after_date: Optional[str] = None
 
 
 class BookingRequest(BaseModel):

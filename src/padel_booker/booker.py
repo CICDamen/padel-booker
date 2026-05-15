@@ -296,11 +296,15 @@ class PadelBooker:
             if dt_str in skip_dates_set:
                 return True
             for rule in rules:
-                if dt.weekday() == rule.weekday:
-                    if rule.before_date and dt_str < rule.before_date:
-                        return True
-                    if rule.after_date and dt_str >= rule.after_date:
-                        return True
+                if dt.weekday() != rule.weekday:
+                    continue
+                # No date conditions → always skip this weekday
+                if not rule.before_date and not rule.after_date:
+                    return True
+                if rule.before_date and dt_str < rule.before_date:
+                    return True
+                if rule.after_date and dt_str >= rule.after_date:
+                    return True
             return False
 
         # Find the latest valid date at or before target_date
