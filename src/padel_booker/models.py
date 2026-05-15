@@ -1,6 +1,5 @@
 """Pydantic models for the Padel Booker API."""
 
-from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -22,20 +21,13 @@ class ConditionalSkipRule(BaseModel):
     after_date: Optional[str] = None
 
 
-class BookingConfig(BaseModel):
-    """Booking policy configuration — loaded from config file and/or environment variables."""
-    login_url: str
+class BookingRequest(BaseModel):
+    days_offset: int = Field(default=28, ge=0, description="Days from today to target booking date")
+    login_url: Optional[str] = Field(default=None, description="Booking platform URL. Falls back to BOOKING_LOGIN_URL env var if not set.")
     start_time: str
     duration_hours: float
+    booker_first_name: str
+    player_candidates: List[str]
     skip_weekends: bool = True
     skip_dates: List[str] = Field(default_factory=list)
     conditional_skip_rules: List[ConditionalSkipRule] = Field(default_factory=list)
-
-
-class BookingRequest(BaseModel):
-    """Per-booking request parameters."""
-    booking_date: str = Field(
-        default_factory=lambda: (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    )
-    booker_first_name: str
-    player_candidates: List[str]

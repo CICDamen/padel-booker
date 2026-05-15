@@ -66,8 +66,6 @@ padel-booker/
      -e BOOKER_USERNAME=your_booking_username \
      -e BOOKER_PASSWORD=your_booking_password \
      -e BOOKING_LOGIN_URL=https://houten.baanreserveren.nl/ \
-     -e BOOKING_START_TIME=21:30 \
-     -e BOOKING_DURATION_HOURS=1.5 \
      -e ENABLE_BOOKING=true \
      padel-booker
    ```
@@ -89,9 +87,9 @@ padel-booker/
 
 ## 🛠️ Configuration
 
-Settings are split into two groups: **infrastructure** (always env vars) and **booking policy** (env vars or a JSON config file).
+All configuration is via environment variables. Only the booking platform credentials and infrastructure settings need to be set server-side — everything else is passed in the request body.
 
-### Infrastructure env vars
+### Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -100,72 +98,10 @@ Settings are split into two groups: **infrastructure** (always env vars) and **b
 | `BOOKER_USERNAME` | ✅ | — | Username for the booking platform |
 | `BOOKER_PASSWORD` | ✅ | — | Password for the booking platform |
 | `CHROMEDRIVER_PATH` | ✅ | — | Path to ChromeDriver binary |
+| `BOOKING_LOGIN_URL` | — | — | Default booking platform URL (can be overridden per request) |
 | `ENABLE_BOOKING` | — | `false` | Set to `true` to confirm bookings; any other value is dry-run mode |
 | `MAX_BOOKING_ATTEMPTS` | — | `2` | Max retries when a player is blocked |
 | `CHROME_OPTIONS` | — | `--headless --no-sandbox --disable-dev-shm-usage` | Space-separated Chrome flags; set to override all defaults |
-
-### Booking policy
-
-These control which days are valid and what time/URL to use. They can be set as **environment variables** (useful for Docker) or in **`data/config.json`** (useful for local runs). Environment variables take precedence over the file.
-
-Copy `data/config.example.json` to `data/config.json` to use the file approach:
-
-```json
-{
-  "login_url": "https://houten.baanreserveren.nl/",
-  "start_time": "21:30",
-  "duration_hours": 1.5,
-  "skip_weekends": true,
-  "skip_dates": [],
-  "conditional_skip_rules": []
-}
-```
-
-| Env var | Config key | Required | Default | Description |
-|---|---|---|---|---|
-| `BOOKING_LOGIN_URL` | `login_url` | ✅ | — | Booking platform URL |
-| `BOOKING_START_TIME` | `start_time` | ✅ | — | Desired start time, e.g. `21:30` |
-| `BOOKING_DURATION_HOURS` | `duration_hours` | ✅ | — | Duration in hours, e.g. `1.5` |
-| `BOOKING_SKIP_WEEKENDS` | `skip_weekends` | — | `true` | Skip Friday, Saturday and Sunday |
-| `BOOKING_SKIP_DATES` | `skip_dates` | — | `[]` | Specific dates to always skip (JSON array of `YYYY-MM-DD` strings) |
-| `BOOKING_CONDITIONAL_SKIP_RULES` | `conditional_skip_rules` | — | `[]` | Weekday skip rules (see below) |
-
-#### Skip rules
-
-`conditional_skip_rules` skips a specific weekday, optionally within a date range. Weekdays: `0` = Monday … `6` = Sunday.
-
-| Rule | Meaning |
-|---|---|
-| `{"weekday": 3}` | Always skip Thursday |
-| `{"weekday": 3, "before_date": "2026-01-01"}` | Skip Thursday only before 2026-01-01 |
-| `{"weekday": 3, "after_date": "2026-06-01"}` | Skip Thursday on and after 2026-06-01 |
-| `{"weekday": 3, "before_date": "2026-01-01", "after_date": "2025-06-01"}` | Skip Thursday within a window |
-
-**Example — skip Thursdays until a league season ends:**
-
-```bash
-# As env var
-BOOKING_CONDITIONAL_SKIP_RULES='[{"weekday": 3, "before_date": "2026-01-01"}]'
-```
-
-```json
-// In config.json
-{
-  "conditional_skip_rules": [
-    {"weekday": 3, "before_date": "2026-01-01"}
-  ]
-}
-```
-
-**Skip specific holiday dates:**
-```bash
-BOOKING_SKIP_DATES='["2025-12-25", "2026-01-01"]'
-```
-
-**Allow Friday bookings:**
-```bash
-BOOKING_SKIP_WEEKENDS=false
-```
 
 ---
 
@@ -196,18 +132,53 @@ Authorization: Basic base64(username:password)
 Content-Type: application/json
 
 {
-  "booking_date": "2025-07-28",
+  "days_offset": 28,
+  "start_time": "21:30",
+  "duration_hours": 1.5,
   "booker_first_name": "John",
-  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
+  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"],
+  "skip_weekends": true,
+  "skip_dates": [],
+  "conditional_skip_rules": []
 }
 ```
 
-**Parameters:**
-- `booking_date`: Latest desired date in `YYYY-MM-DD` format. The system tries this date first, then searches backwards through valid days to today if no slot is found. Defaults to today + 30 days.
-- `booker_first_name`: First name of the person making the booking (used to detect if the booker themselves is blocked)
-- `player_candidates`: Array of player names to try for the booking
+**Required parameters:**
+- `start_time`: Desired start time in `HH:MM` format
+- `duration_hours`: Duration in hours (e.g. `1.5` for 90 minutes)
+- `booker_first_name`: First name of the person making the booking (used to detect if the booker is blocked)
+- `player_candidates`: Array of player names to try
 
-> The booking URL, start time, duration, and skip rules come from the [booking policy config](#booking-policy) — not the request body.
+**Optional parameters:**
+- `days_offset` (default `28`): Days from today to target. The server computes the date as `today + days_offset` and searches backwards through valid days if no slot is found on that date
+- `login_url` (default: `BOOKING_LOGIN_URL` env var): Booking platform URL — set in the request to override the server default
+- `skip_weekends` (default `true`): Skip Friday, Saturday and Sunday
+- `skip_dates` (default `[]`): Specific dates to always skip, e.g. `["2025-12-25", "2026-01-01"]`
+- `conditional_skip_rules` (default `[]`): Skip a specific weekday within an optional date range (see below)
+
+#### Skip rules
+
+Each rule in `conditional_skip_rules` has a `weekday` (0 = Monday … 6 = Sunday) and optional `before_date` / `after_date` bounds:
+
+| Rule | Meaning |
+|---|---|
+| `{"weekday": 3}` | Always skip Thursday |
+| `{"weekday": 3, "before_date": "2026-01-01"}` | Skip Thursday only before 2026-01-01 |
+| `{"weekday": 3, "after_date": "2026-06-01"}` | Skip Thursday on and after 2026-06-01 |
+
+**Example — skip Thursdays until a league season ends on 2026-01-01:**
+```json
+{
+  "days_offset": 28,
+  "start_time": "21:30",
+  "duration_hours": 1.5,
+  "booker_first_name": "Casper",
+  "player_candidates": ["Max Tijdeman", "Ilmar Balk", "Frank Pek"],
+  "conditional_skip_rules": [
+    {"weekday": 3, "before_date": "2026-01-01"}
+  ]
+}
+```
 
 **Response:**
 ```json
@@ -269,7 +240,9 @@ curl http://localhost:8080/health
 curl -u admin:password \
   -H "Content-Type: application/json" \
   -d '{
-    "booking_date": "2025-07-28",
+    "days_offset": 28,
+    "start_time": "21:30",
+    "duration_hours": 1.5,
     "booker_first_name": "John",
     "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson"]
   }' \
@@ -399,9 +372,6 @@ The project uses GitHub Actions for continuous integration and deployment.
 For integration tests to run in CI, configure these GitHub secrets:
 - `BOOKER_USERNAME`: Booking platform username
 - `BOOKER_PASSWORD`: Booking platform password
-- `BOOKING_LOGIN_URL`: Booking platform URL
-- `BOOKING_START_TIME`: Desired court start time
-- `BOOKING_DURATION_HOURS`: Duration in hours
 
 **Note**: Integration tests are automatically skipped if:
 - Credentials are not configured

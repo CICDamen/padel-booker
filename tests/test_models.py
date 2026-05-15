@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from padel_booker.models import BookingRequest, BookingConfig, ConditionalSkipRule
+from padel_booker.models import BookingRequest, ConditionalSkipRule
 
 
 @pytest.mark.unit
@@ -13,99 +13,76 @@ class TestBookingRequest:
     def test_valid_booking_request(self):
         """Test creating a valid booking request."""
         data = {
-            "booking_date": "2025-12-01",
+            "start_time": "21:30",
+            "duration_hours": 1.5,
             "booker_first_name": "John",
             "player_candidates": ["John Doe", "Jane Smith"],
         }
 
         request = BookingRequest(**data)
 
-        assert request.booking_date == "2025-12-01"
+        assert request.days_offset == 28
+        assert request.login_url is None
+        assert request.start_time == "21:30"
+        assert request.duration_hours == 1.5
         assert request.booker_first_name == "John"
         assert request.player_candidates == ["John Doe", "Jane Smith"]
+        assert request.skip_weekends is True
+        assert request.skip_dates == []
+        assert request.conditional_skip_rules == []
 
     def test_missing_required_fields(self):
         """Test that missing required fields raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            BookingRequest()  # Missing booker_first_name and player_candidates
+            BookingRequest()
 
         errors = exc_info.value.errors()
-        assert len(errors) == 2
+        field_names = {e["loc"][0] for e in errors}
+        assert "start_time" in field_names
+        assert "duration_hours" in field_names
+        assert "booker_first_name" in field_names
+        assert "player_candidates" in field_names
 
-    def test_default_booking_date_is_30_days_from_now(self):
-        """Test that booking_date defaults to today + 30 days when not provided."""
-        from datetime import datetime, timedelta
-        from unittest.mock import patch
-
-        fixed_now = datetime(2026, 1, 1, 12, 0, 0)
-        expected_date = (fixed_now + timedelta(days=30)).strftime("%Y-%m-%d")
-
+    def test_custom_days_offset(self):
+        """Test that days_offset can be set explicitly."""
         data = {
+            "days_offset": 14,
+            "start_time": "21:30",
+            "duration_hours": 1.5,
             "booker_first_name": "John",
             "player_candidates": ["John Doe"],
         }
-
-        with patch("padel_booker.models.datetime") as mock_dt:
-            mock_dt.now.return_value = fixed_now
-            request = BookingRequest(**data)
-
-        assert request.booking_date == expected_date
-
-    def test_empty_player_candidates(self):
-        """Test booking request with empty player candidates list."""
-        data = {
-            "booking_date": "2025-12-01",
-            "booker_first_name": "John",
-            "player_candidates": [],
-        }
-
         request = BookingRequest(**data)
-        assert request.player_candidates == []
+        assert request.days_offset == 14
 
-
-@pytest.mark.unit
-class TestBookingConfig:
-    """Test BookingConfig model."""
-
-    def test_valid_config(self):
-        """Test creating a valid booking config."""
+    def test_login_url_override(self):
+        """Test that login_url can be set explicitly in the request."""
         data = {
             "login_url": "https://example.com",
             "start_time": "21:30",
             "duration_hours": 1.5,
+            "booker_first_name": "John",
+            "player_candidates": ["John Doe"],
         }
+        request = BookingRequest(**data)
+        assert request.login_url == "https://example.com"
 
-        config = BookingConfig(**data)
-
-        assert config.login_url == "https://example.com"
-        assert config.start_time == "21:30"
-        assert config.duration_hours == 1.5
-        assert config.skip_weekends is True
-        assert config.skip_dates == []
-        assert config.conditional_skip_rules == []
-
-    def test_missing_required_fields(self):
-        """Test that BookingConfig requires all mandatory fields."""
-        with pytest.raises(ValidationError):
-            BookingConfig(login_url="https://example.com")
-
-    def test_skip_options_in_config(self):
-        """Test that skip options can be set in config."""
+    def test_skip_options(self):
+        """Test skip_weekends, skip_dates, and conditional_skip_rules fields."""
         data = {
-            "login_url": "https://example.com",
             "start_time": "21:30",
             "duration_hours": 1.5,
+            "booker_first_name": "John",
+            "player_candidates": ["John Doe"],
             "skip_weekends": False,
             "skip_dates": ["2025-12-25"],
             "conditional_skip_rules": [{"weekday": 3, "before_date": "2026-01-01"}],
         }
-
-        config = BookingConfig(**data)
-
-        assert config.skip_weekends is False
-        assert config.skip_dates == ["2025-12-25"]
-        assert len(config.conditional_skip_rules) == 1
-        assert config.conditional_skip_rules[0].weekday == 3
+        request = BookingRequest(**data)
+        assert request.skip_weekends is False
+        assert request.skip_dates == ["2025-12-25"]
+        assert len(request.conditional_skip_rules) == 1
+        assert request.conditional_skip_rules[0].weekday == 3
 
 
 @pytest.mark.unit
