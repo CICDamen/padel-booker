@@ -93,16 +93,16 @@ Settings are split into two groups: **infrastructure** (always env vars) and **b
 
 ### Infrastructure env vars
 
-| Variable | Required | Description |
-|---|---|---|
-| `API_USERNAME` | ✅ | Username for API authentication |
-| `API_PASSWORD` | ✅ | Password for API authentication |
-| `BOOKER_USERNAME` | ✅ | Username for the booking platform |
-| `BOOKER_PASSWORD` | ✅ | Password for the booking platform |
-| `CHROMEDRIVER_PATH` | ✅ | Path to ChromeDriver binary |
-| `ENABLE_BOOKING` | — | Set to `true` to confirm bookings. Omit for dry-run mode |
-| `MAX_BOOKING_ATTEMPTS` | — | Max retries when a player is blocked (default: `2`) |
-| `CHROME_OPTIONS` | — | Space-separated Chrome flags (overrides built-in headless defaults) |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `API_USERNAME` | ✅ | — | Username for API authentication |
+| `API_PASSWORD` | ✅ | — | Password for API authentication |
+| `BOOKER_USERNAME` | ✅ | — | Username for the booking platform |
+| `BOOKER_PASSWORD` | ✅ | — | Password for the booking platform |
+| `CHROMEDRIVER_PATH` | ✅ | — | Path to ChromeDriver binary |
+| `ENABLE_BOOKING` | — | `false` | Set to `true` to confirm bookings; any other value is dry-run mode |
+| `MAX_BOOKING_ATTEMPTS` | — | `2` | Max retries when a player is blocked |
+| `CHROME_OPTIONS` | — | `--headless --no-sandbox --disable-dev-shm-usage` | Space-separated Chrome flags; set to override all defaults |
 
 ### Booking policy
 
