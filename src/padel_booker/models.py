@@ -22,22 +22,20 @@ class ConditionalSkipRule(BaseModel):
     after_date: Optional[str] = None
 
 
-class BookingRequest(BaseModel):
+class BookingConfig(BaseModel):
+    """Booking policy configuration — loaded from config file and/or environment variables."""
     login_url: str
-    booking_date: str = Field(
-        default_factory=lambda: (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    )
     start_time: str
     duration_hours: float
-    booker_first_name: str
-    player_candidates: List[str]
-    skip_dates: List[str] = Field(default_factory=list)
     skip_weekends: bool = True
+    skip_dates: List[str] = Field(default_factory=list)
     conditional_skip_rules: List[ConditionalSkipRule] = Field(default_factory=list)
 
 
-class ConfigModel(BaseModel):
-    login_url: str
-    booking_date: str
-    start_time: str
-    duration_hours: float
+class BookingRequest(BaseModel):
+    """Per-booking request parameters."""
+    booking_date: str = Field(
+        default_factory=lambda: (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    )
+    booker_first_name: str
+    player_candidates: List[str]

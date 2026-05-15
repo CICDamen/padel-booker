@@ -1,0 +1,8 @@
+{
+  "login_url": "https://houten.baanreserveren.nl/",
+  "start_time": "21:30",
+  "duration_hours": 1.5,
+  "skip_weekends": true,
+  "skip_dates": [],
+  "conditional_skip_rules": []
+}

@@ -73,24 +73,72 @@ def setup_logging(name=None) -> logging.Logger:
 
 
 def load_config(config_path: str | None = None) -> dict:
-    """Loads the configuration from a file
+    """Loads booking policy configuration from a JSON file.
+
+    Returns an empty dict if the file does not exist, so env vars alone are sufficient.
 
     Args:
         config_path: Path to the configuration file.
         Defaults to 'data/config.json' relative to project root.
     """
+    if config_path is None:
+        project_root = Path(__file__).parent.parent.resolve()
+        config_path = project_root / "data" / "config.json"
+    else:
+        config_path = Path(config_path)
+
+    if not config_path.exists():
+        return {}
+
     try:
-        if config_path is None:
-            # Find project root (the directory containing this file, then go up one level)
-            project_root = Path(__file__).parent.parent.resolve()
-            config_path = project_root / "data" / "config.json"
-        else:
-            config_path = Path(config_path)
         with open(config_path, "r", encoding="utf-8") as file:
-            config = json.load(file)
-        return config
+            return json.load(file)
     except Exception as e:
-        raise RuntimeError(f"Failed to load config from {config_path}: {e}") from e
+        raise RuntimeError(f"Failed to parse config from {config_path}: {e}") from e
+
+
+def load_booking_config(config_path: str | None = None):
+    """Load booking policy config from file and/or environment variables.
+
+    Environment variables take precedence over the config file. Recognised variables:
+        BOOKING_LOGIN_URL, BOOKING_START_TIME, BOOKING_DURATION_HOURS,
+        BOOKING_SKIP_WEEKENDS (true/false), BOOKING_SKIP_DATES (JSON array),
+        BOOKING_CONDITIONAL_SKIP_RULES (JSON array of rule objects)
+
+    Raises:
+        RuntimeError: if the config file exists but cannot be parsed.
+        pydantic.ValidationError: if required fields are missing from both sources.
+    """
+    from .models import BookingConfig
+
+    config = load_config(config_path)
+
+    str_vars = {
+        "BOOKING_LOGIN_URL": "login_url",
+        "BOOKING_START_TIME": "start_time",
+    }
+    for env_key, cfg_key in str_vars.items():
+        val = os.getenv(env_key)
+        if val is not None:
+            config[cfg_key] = val
+
+    val = os.getenv("BOOKING_DURATION_HOURS")
+    if val is not None:
+        config["duration_hours"] = float(val)
+
+    val = os.getenv("BOOKING_SKIP_WEEKENDS")
+    if val is not None:
+        config["skip_weekends"] = val.lower() == "true"
+
+    for env_key, cfg_key in [
+        ("BOOKING_SKIP_DATES", "skip_dates"),
+        ("BOOKING_CONDITIONAL_SKIP_RULES", "conditional_skip_rules"),
+    ]:
+        val = os.getenv(env_key)
+        if val is not None:
+            config[cfg_key] = json.loads(val)
+
+    return BookingConfig(**config)
 
 
 def run_booking_background(
