@@ -73,7 +73,7 @@ def setup_logging(name=None) -> logging.Logger:
 
 
 def load_config(config_path: str | None = None) -> dict:
-    """Loads the configuration from a file
+    """Loads configuration from a JSON file.
 
     Args:
         config_path: Path to the configuration file.
@@ -81,14 +81,12 @@ def load_config(config_path: str | None = None) -> dict:
     """
     try:
         if config_path is None:
-            # Find project root (the directory containing this file, then go up one level)
             project_root = Path(__file__).parent.parent.resolve()
             config_path = project_root / "data" / "config.json"
         else:
             config_path = Path(config_path)
         with open(config_path, "r", encoding="utf-8") as file:
-            config = json.load(file)
-        return config
+            return json.load(file)
     except Exception as e:
         raise RuntimeError(f"Failed to load config from {config_path}: {e}") from e
 
@@ -103,6 +101,9 @@ def run_booking_background(
     booker_first_name: str,
     player_candidates: list[str],
     booking_status: Dict,
+    skip_weekends: bool = True,
+    skip_dates: list[str] | None = None,
+    conditional_skip_rules: list | None = None,
 ):
     """Run booking in background thread.
 
@@ -116,6 +117,9 @@ def run_booking_background(
         booker_first_name: First name of the person making the booking
         player_candidates: List of player names to try
         booking_status: Shared dict to track booking status
+        skip_weekends: If True (default), skip Friday, Saturday and Sunday.
+        skip_dates: Optional list of specific dates (YYYY-MM-DD) to always skip.
+        conditional_skip_rules: Optional list of rules to skip a weekday within a date range.
     """
     from .booker import PadelBooker
 
@@ -142,7 +146,12 @@ def run_booking_background(
 
             # Find consecutive slots with fallback to previous workdays
             slot, end_time, found_date = booker.find_consecutive_slots_with_fallback(
-                booking_date, start_time, duration_hours
+                booking_date,
+                start_time,
+                duration_hours,
+                skip_weekends=skip_weekends,
+                skip_dates=skip_dates,
+                conditional_skip_rules=conditional_skip_rules,
             )
 
             if not slot:

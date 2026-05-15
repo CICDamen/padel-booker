@@ -13,9 +13,10 @@ Automated padel court booking API for Sportclub Houten, powered by FastAPI and S
 - **RESTful API** for automated court booking
 - **Basic Authentication** for secure access
 - **Background processing** for booking operations
-- **Smart slot fallback**: Automatically searches forward first, then backwards through weekdays (Monday-Thursday only, avoiding Friday and weekends) up to the current date if preferred date unavailable
+- **Smart slot fallback**: searches the target date first, then backwards through valid days up to today
+- **Flexible skip rules**: skip weekends/Fridays, specific dates, whole weekdays, or a weekday only before/after a cutoff date
 - Smart player selection with rotation and error handling
-- **Flexible booking parameters** passed directly via API
+- **Booking policy via config**: stable settings (URL, time, skip rules) live in a config file or env vars; the booking request only carries what changes each time
 - Headless browser automation (no UI required)
 - **Docker support** for easy deployment
 - Comprehensive logging and error reporting
@@ -32,6 +33,8 @@ padel-booker/
 │   ├── booker.py           # Main booking automation logic
 │   ├── utils.py            # Utilities (driver, logging, auth, background tasks)
 │   └── exceptions.py       # Custom exceptions
+├── data/
+│   └── config.example.json # Booking policy config template (copy to config.json)
 ├── Dockerfile              # Container configuration
 ├── pyproject.toml          # Project metadata & dependencies
 └── README.md               # This file
@@ -60,11 +63,11 @@ padel-booker/
      -p 8080:8080 \
      -e API_USERNAME=your_api_user \
      -e API_PASSWORD=your_api_password \
-     -e BOOKER_PASSWORD=your_booking_password \
      -e BOOKER_USERNAME=your_booking_username \
-     -e ENABLE_BOOKING=true \  # Set to true to enable actual bookings
-     -e MAX_BOOKING_ATTEMPTS=number_of_attempts \ # Optional: max attempts for booking - if players are not available
-     -t padel-booker
+     -e BOOKER_PASSWORD=your_booking_password \
+     -e BOOKING_LOGIN_URL=https://houten.baanreserveren.nl/ \
+     -e ENABLE_BOOKING=true \
+     padel-booker
    ```
 
 ### 🐍 Local Development
@@ -84,24 +87,21 @@ padel-booker/
 
 ## 🛠️ Configuration
 
-### Environment Variables
+All configuration is via environment variables. Only the booking platform credentials and infrastructure settings need to be set server-side — everything else is passed in the request body.
 
-**Required:**
-- `API_USERNAME`: Username for API authentication  
-- `API_PASSWORD`: Password for API authentication
-- `BOOKER_USERNAME`: Username for the booking platform
-- `BOOKER_PASSWORD`: Password for the booking platform
+### Environment variables
 
-**Optional:**
-- `ENABLE_BOOKING`: Set to `true` to enable actual booking confirmation. When not set or set to any other value, the system runs in dry-run mode (simulates booking without final confirmation)
-- `MAX_BOOKING_ATTEMPTS`: Maximum number of attempts for booking if players are not available
-
-**Example:**
-```bash
-export API_USERNAME="admin"
-export API_PASSWORD="secure_password"
-export ENABLE_BOOKING="true"  # Enable actual bookings (omit for dry-run mode)
-```
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `API_USERNAME` | ✅ | — | Username for API authentication |
+| `API_PASSWORD` | ✅ | — | Password for API authentication |
+| `BOOKER_USERNAME` | ✅ | — | Username for the booking platform |
+| `BOOKER_PASSWORD` | ✅ | — | Password for the booking platform |
+| `CHROMEDRIVER_PATH` | ✅ | — | Path to ChromeDriver binary |
+| `BOOKING_LOGIN_URL` | — | — | Default booking platform URL (can be overridden per request) |
+| `ENABLE_BOOKING` | — | `false` | Set to `true` to confirm bookings; any other value is dry-run mode |
+| `MAX_BOOKING_ATTEMPTS` | — | `2` | Max retries when a player is blocked |
+| `CHROME_OPTIONS` | — | `--headless --no-sandbox --disable-dev-shm-usage` | Space-separated Chrome flags; set to override all defaults |
 
 ---
 
@@ -132,22 +132,53 @@ Authorization: Basic base64(username:password)
 Content-Type: application/json
 
 {
-  "login_url": "https://houten.baanreserveren.nl/",
-  "booking_date": "2025-07-28",
+  "days_offset": 28,
   "start_time": "21:30",
   "duration_hours": 1.5,
   "booker_first_name": "John",
-  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"]
+  "player_candidates": ["John Smith", "Jane Doe", "Mike Johnson", "Sarah Wilson"],
+  "skip_weekends": true,
+  "skip_dates": [],
+  "conditional_skip_rules": []
 }
 ```
 
-**Parameters:**
-- `login_url`: URL to the booking website
-- `booking_date`: Date to book in YYYY-MM-DD format (automatically searches forward first, then backwards through weekdays Monday-Thursday only up to the current date if unavailable)
-- `start_time`: Start time in HH:MM format
-- `duration_hours`: Duration in hours (e.g., 1.5 for 90 minutes)
-- `booker_first_name`: First name of the person making the booking
-- `player_candidates`: Array of player names to try for the booking
+**Required parameters:**
+- `start_time`: Desired start time in `HH:MM` format
+- `duration_hours`: Duration in hours (e.g. `1.5` for 90 minutes)
+- `booker_first_name`: First name of the person making the booking (used to detect if the booker is blocked)
+- `player_candidates`: Array of player names to try
+
+**Optional parameters:**
+- `days_offset` (default `28`): Days from today to target. The server computes the date as `today + days_offset` and searches backwards through valid days if no slot is found on that date
+- `login_url` (default: `BOOKING_LOGIN_URL` env var): Booking platform URL — set in the request to override the server default
+- `skip_weekends` (default `true`): Skip Friday, Saturday and Sunday
+- `skip_dates` (default `[]`): Specific dates to always skip, e.g. `["2025-12-25", "2026-01-01"]`
+- `conditional_skip_rules` (default `[]`): Skip a specific weekday within an optional date range (see below)
+
+#### Skip rules
+
+Each rule in `conditional_skip_rules` has a `weekday` (0 = Monday … 6 = Sunday) and optional `before_date` / `after_date` bounds:
+
+| Rule | Meaning |
+|---|---|
+| `{"weekday": 3}` | Always skip Thursday |
+| `{"weekday": 3, "before_date": "2026-01-01"}` | Skip Thursday only before 2026-01-01 |
+| `{"weekday": 3, "after_date": "2026-06-01"}` | Skip Thursday on and after 2026-06-01 |
+
+**Example — skip Thursdays until a league season ends on 2026-01-01:**
+```json
+{
+  "days_offset": 28,
+  "start_time": "21:30",
+  "duration_hours": 1.5,
+  "booker_first_name": "Casper",
+  "player_candidates": ["Max Tijdeman", "Ilmar Balk", "Frank Pek"],
+  "conditional_skip_rules": [
+    {"weekday": 3, "before_date": "2026-01-01"}
+  ]
+}
+```
 
 **Response:**
 ```json
@@ -209,8 +240,7 @@ curl http://localhost:8080/health
 curl -u admin:password \
   -H "Content-Type: application/json" \
   -d '{
-    "login_url": "https://houten.baanreserveren.nl/",
-    "booking_date": "2025-07-28",
+    "days_offset": 28,
     "start_time": "21:30",
     "duration_hours": 1.5,
     "booker_first_name": "John",
@@ -230,8 +260,8 @@ The project uses pytest with comprehensive test coverage across all modules.
 
 ### Test Summary
 
-**61 tests total:**
-- **59 unit tests** (fast, no browser, mocked) - ~2.3s
+**81 tests total:**
+- **79 unit tests** (fast, no browser, mocked) - ~4s
 - **2 integration tests** (requires browser and credentials) - ~varies
 
 ### Running Tests
@@ -269,12 +299,12 @@ uv run pytest tests/test_utils.py
 tests/
 ├── __init__.py
 ├── conftest.py                           # Pytest fixtures and configuration
-├── test_api.py                           # FastAPI endpoint tests (9 tests)
-├── test_booker.py                        # PadelBooker class tests (14 tests)
+├── test_api.py                           # FastAPI endpoint tests (12 tests)
+├── test_booker.py                        # PadelBooker class tests (22 tests)
 ├── test_integration_booking_flow.py      # Integration tests (2 tests)
 ├── test_exceptions.py                    # Custom exception tests (6 tests)
-├── test_models.py                        # Pydantic model tests (7 tests)
-├── test_navigation_strategy.py           # Navigation strategy tests (9 tests)
+├── test_models.py                        # Pydantic model tests (11 tests)
+├── test_navigation_strategy.py           # Navigation strategy tests (15 tests)
 └── test_utils.py                         # Utility function tests (13 tests)
 ```
 

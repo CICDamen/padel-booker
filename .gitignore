@@ -12,3 +12,6 @@ wheels/
 
 # IDE files
 .idea/
+
+# Local booking config (use data/config.example.json as template)
+data/config.json

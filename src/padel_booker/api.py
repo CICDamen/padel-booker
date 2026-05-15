@@ -2,6 +2,7 @@
 
 import os
 import threading
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Security
 from .models import BookingRequest
 from .utils import run_booking_background, authenticate_user
@@ -20,14 +21,12 @@ async def book_court(
     """Start a booking process."""
     global booking_status
 
-    # Verify authentication was successful
     if not authenticated:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
     if booking_status["running"]:
         raise HTTPException(status_code=400, detail="Booking already in progress")
 
-    # Get booker credentials from environment variables
     booker_username = os.getenv("BOOKER_USERNAME")
     booker_password = os.getenv("BOOKER_PASSWORD")
 
@@ -37,26 +36,38 @@ async def book_court(
             detail="BOOKER_USERNAME and BOOKER_PASSWORD environment variables must be set",
         )
 
-    # Start booking in background thread with all parameters from the request
+    login_url = request.login_url or os.getenv("BOOKING_LOGIN_URL")
+    if not login_url:
+        raise HTTPException(
+            status_code=400,
+            detail="login_url required in request body or set BOOKING_LOGIN_URL env var",
+        )
+
+    booking_date = (datetime.now() + timedelta(days=request.days_offset)).strftime("%Y-%m-%d")
+
     thread = threading.Thread(
         target=run_booking_background,
-        args=(
-            booker_username,
-            booker_password,
-            request.login_url,
-            request.booking_date,
-            request.start_time,
-            request.duration_hours,
-            request.booker_first_name,
-            request.player_candidates,
-            booking_status,
-        ),
+        kwargs={
+            "username": booker_username,
+            "password": booker_password,
+            "login_url": login_url,
+            "booking_date": booking_date,
+            "start_time": request.start_time,
+            "duration_hours": request.duration_hours,
+            "booker_first_name": request.booker_first_name,
+            "player_candidates": request.player_candidates,
+            "booking_status": booking_status,
+            "skip_weekends": request.skip_weekends,
+            "skip_dates": request.skip_dates or None,
+            "conditional_skip_rules": request.conditional_skip_rules or None,
+        },
     )
     thread.start()
 
     return {
         "status": "started",
         "message": "Booking process started",
+        "booking_date": booking_date,
         "started_at": booking_status["started_at"],
     }
 
@@ -64,7 +75,6 @@ async def book_court(
 @app.get("/api/status")
 async def get_status(authenticated: bool = Security(authenticate_user)):
     """Get current booking status."""
-    # Verify authentication was successful
     if not authenticated:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
